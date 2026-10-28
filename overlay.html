@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Roulette Giveaway — оверлей</title>
+    <link rel="stylesheet" href="css/overlay.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root" class="root hidden">
+      <div id="header" class="header"></div>
+      <div class="main">
+        <div class="wheel-box">
+          <canvas id="wheel"></canvas>
+        </div>
+        <aside id="winnersBox" class="winners-box" hidden>
+          <h2>Победители</h2>
+          <ol id="winners"></ol>
+        </aside>
+      </div>
+      <div id="result" class="result"></div>
+    </div>
+    <script type="module" src="js/overlay.js"></script>
+  </body>
+</html>

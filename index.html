@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Roulette Giveaway — пульт</title>
+    <link rel="stylesheet" href="css/panel.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <span>Roulette Giveaway</span>
+      </div>
+      <div class="topbar-right">
+        <span id="chatStatus" class="pill" hidden></span>
+        <button id="openSettings" class="btn ghost">⚙ Настройки</button>
+        <button id="copyOverlay" class="btn ghost" title="Скопировать адрес оверлея для OBS">Оверлей для OBS</button>
+        <div id="account"></div>
+      </div>
+    </header>
+
+    <div id="notice" class="notice" hidden></div>
+
+    <main class="layout">
+      <section class="card stage">
+        <div class="wheel-wrap">
+          <canvas id="wheel"></canvas>
+        </div>
+        <div class="stage-bottom">
+          <div id="result" class="result" hidden></div>
+          <div class="controls">
+            <button id="startReg" class="btn primary big">Начать регистрацию</button>
+            <button id="closeReg" class="btn primary big" hidden>Закрыть регистрацию</button>
+            <button id="spin" class="btn gold big" hidden>КРУТИТЬ</button>
+            <button id="stopAuto" class="btn big" hidden>Стоп</button>
+            <button id="reset" class="btn primary big" hidden>Новый розыгрыш</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="side">
+        <div class="card">
+          <h3>Победители</h3>
+          <ol id="winners" class="winners"></ol>
+        </div>
+
+        <div class="card people-card">
+          <div class="people-head">
+            <h3>Участники</h3>
+            <div id="counts" class="counts"></div>
+          </div>
+          <div class="people-tools">
+            <input id="search" type="search" placeholder="Поиск по нику" />
+            <select id="filter">
+              <option value="all">Все</option>
+              <option value="ok">Допущены</option>
+              <option value="checking">Проверяются</option>
+              <option value="rejected">Отклонены</option>
+            </select>
+          </div>
+          <ul id="people" class="people-list"></ul>
+          <form id="addForm" class="add-form">
+            <input id="addName" type="text" placeholder="Добавить вручную по нику" />
+            <button class="btn small">Добавить</button>
+          </form>
+          <button id="addTest" class="btn ghost small">+10 тестовых участников</button>
+        </div>
+      </aside>
+    </main>
+
+    <dialog id="settingsDialog" class="settings-dialog">
+      <div class="dialog-head">
+        <h2>Настройки розыгрыша</h2>
+        <button id="closeSettingsX" class="icon-btn" title="Закрыть">✕</button>
+      </div>
+      <nav class="tabs">
+        <button type="button" data-tab="entry" class="active">Участие</button>
+        <button type="button" data-tab="mode">Режим</button>
+        <button type="button" data-tab="chat">Чат</button>
+      </nav>
+      <div id="lockNote" class="lock-note" hidden>
+        <span id="lockText"></span>
+        <span class="lock-actions">
+          <button id="restart" type="button" class="btn small">Переиграть</button>
+          <button id="lockReset" type="button" class="btn small">Новый розыгрыш</button>
+        </span>
+      </div>
+
+      <div class="tab-panel" data-panel="entry">
+        <label class="field">
+          <span>Кодовое слово</span>
+          <input id="keyword" type="text" maxlength="100" />
+        </label>
+        <label class="check">
+          <input id="exactMatch" type="checkbox" />
+          <span>Сообщение должно совпадать со словом целиком</span>
+        </label>
+        <div class="field">
+          <span>Кто может участвовать</span>
+          <div class="segmented" data-name="eligibility">
+            <button type="button" data-value="all">Все</button>
+            <button type="button" data-value="followers">Фолловеры</button>
+            <button type="button" data-value="subs">Сабы</button>
+          </div>
+        </div>
+        <label class="field" data-show="eligibility=followers">
+          <span>Минимальный стаж фоллоу, дней</span>
+          <input id="minFollowDays" type="number" min="0" max="3650" />
+        </label>
+        <label class="field">
+          <span>Не допускать (ники через запятую)</span>
+          <textarea id="excluded" rows="2"></textarea>
+        </label>
+        <label class="check">
+          <input id="excludeBroadcaster" type="checkbox" />
+          <span>Не допускать самого стримера</span>
+        </label>
+      </div>
+
+      <div class="tab-panel" data-panel="mode" hidden>
+        <label class="field">
+          <span>Количество призов</span>
+          <input id="prizeCount" type="number" min="1" max="100" step="1" />
+        </label>
+        <div class="segmented" data-name="mode">
+          <button type="button" data-value="elimination">На выбывание</button>
+          <button type="button" data-value="simple">Простой</button>
+        </div>
+        <p id="modeHint" class="hint"></p>
+        <label class="field" data-show="mode=elimination">
+          <span>Финал: первым разыгрывается</span>
+          <select id="finalOrder">
+            <option value="first">1 место, затем 2-е и дальше</option>
+            <option value="last">Последнее место, 1-е достаётся оставшемуся</option>
+          </select>
+        </label>
+        <label class="check" data-show="mode=simple">
+          <input id="allowRepeatWins" type="checkbox" />
+          <span>Победитель может выиграть ещё раз</span>
+        </label>
+        <div class="row2">
+          <label class="field">
+            <span>Прокрут за приз, сек</span>
+            <input id="spinSeconds" type="number" min="2" max="30" step="0.5" />
+          </label>
+          <label class="field" data-show="mode=elimination">
+            <span>Прокрут на выбывание, сек</span>
+            <input id="eliminationSpinSeconds" type="number" min="1" max="30" step="0.5" />
+          </label>
+        </div>
+        <label class="check">
+          <input id="autoSpin" type="checkbox" />
+          <span>Крутить автоматически до конца</span>
+        </label>
+        <label class="field" data-show="autoSpin=true">
+          <span>Пауза между прокрутами, сек</span>
+          <input id="autoDelaySeconds" type="number" min="0" max="60" step="0.5" />
+        </label>
+      </div>
+
+      <div class="tab-panel" data-panel="chat" hidden>
+        <label class="check">
+          <input id="announce" type="checkbox" />
+          <span>Писать в чат от имени канала</span>
+        </label>
+        <label class="field" data-show="announce=true">
+          <span>Старт регистрации</span>
+          <textarea id="announceStart" rows="2"></textarea>
+        </label>
+        <label class="field" data-show="announce=true">
+          <span>Регистрация закрыта</span>
+          <textarea id="announceClose" rows="2"></textarea>
+        </label>
+        <label class="field" data-show="announce=true">
+          <span>Победитель</span>
+          <textarea id="announceWin" rows="2"></textarea>
+        </label>
+        <p class="hint" data-show="announce=true">Подстановки: {keyword}, {rules}, {count}, {prize}, {name}, {place}</p>
+      </div>
+
+      <div class="dialog-foot">
+        <span class="hint">Сохраняется автоматически</span>
+        <button id="closeSettings" type="button" class="btn primary">Готово</button>
+      </div>
+    </dialog>
+
+    <!-- Своё окно подтверждения: confirm() в OBS и встроенных браузерах молча возвращает «нет». -->
+    <dialog id="confirmDialog" class="confirm-dialog">
+      <p id="confirmText"></p>
+      <div class="confirm-actions">
+        <button id="confirmNo" type="button" class="btn ghost">Отмена</button>
+        <button id="confirmYes" type="button" class="btn primary">Да</button>
+      </div>
+    </dialog>
+
+    <script type="module" src="js/panel.js"></script>
+  </body>
+</html>
