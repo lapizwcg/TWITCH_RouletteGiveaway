@@ -1,6 +1,6 @@
-import { Wheel } from './wheel.js';
-import { createBus } from './bus.js';
-import { resultText } from './giveaway.js';
+import { Wheel } from './wheel.js?v=5';
+import { createBus } from './bus.js?v=5';
+import { resultText } from './giveaway.js?v=5';
 
 // Параметры адреса: ?winners=0 — не показывать список победителей.
 const params = new URLSearchParams(location.search);

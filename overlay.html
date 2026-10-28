@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Roulette Giveaway — оверлей</title>
-    <link rel="stylesheet" href="css/overlay.css" />
+    <link rel="stylesheet" href="css/overlay.css?v=5" />
   </head>
   <body>
     <!-- Подсказка видна сразу, без скриптов: если скрипты не загрузятся, она хотя бы скажет об этом. -->
@@ -15,6 +15,10 @@
       <p id="hintStatus" class="muted">Загрузка…</p>
     </div>
     <script>
+      window.addEventListener('error', function (e) {
+        if (window.__overlayStarted) return;
+        document.getElementById('hintStatus').textContent = 'Ошибка оверлея: ' + (e.message || 'скрипт не загрузился');
+      }, true);
       setTimeout(function () {
         if (window.__overlayStarted) return;
         document.getElementById('hintStatus').textContent =
@@ -34,6 +38,6 @@
       </div>
       <div id="result" class="result"></div>
     </div>
-    <script type="module" src="js/overlay.js"></script>
+    <script type="module" src="js/overlay.js?v=5"></script>
   </body>
 </html>

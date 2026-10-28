@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Roulette Giveaway — пульт</title>
-    <link rel="stylesheet" href="css/panel.css" />
+    <link rel="stylesheet" href="css/panel.css?v=5" />
   </head>
   <body>
     <header class="topbar">
@@ -194,6 +194,29 @@
       </div>
     </dialog>
 
-    <script type="module" src="js/panel.js"></script>
+    <!-- Если скрипты пульта упадут или не загрузятся, показываем причину прямо на странице, а не пустой экран. -->
+    <div id="fatal" class="fatal" hidden></div>
+    <script>
+      (function () {
+        var box = document.getElementById('fatal');
+        function show(text) {
+          if (window.__panelStarted) return; // ловим только то, что мешает пульту запуститься
+          box.hidden = false;
+          box.textContent = 'Ошибка пульта: ' + text + ' — нажмите Ctrl+F5 или в OBS закройте и откройте док-панель заново.';
+        }
+        window.addEventListener('error', function (e) {
+          var t = e.target;
+          if (t && t !== window && t.tagName !== 'SCRIPT') return; // картинки и т.п. не критичны
+          show(e.message || (t && t.src ? 'не загрузился ' + t.src : 'неизвестная ошибка'));
+        }, true);
+        window.addEventListener('unhandledrejection', function (e) {
+          show(String(e.reason && e.reason.message ? e.reason.message : e.reason));
+        });
+        setTimeout(function () {
+          if (!window.__panelStarted) show('скрипты не запустились');
+        }, 8000);
+      })();
+    </script>
+    <script type="module" src="js/panel.js?v=5"></script>
   </body>
 </html>

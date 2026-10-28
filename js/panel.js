@@ -1,9 +1,9 @@
-import * as tw from './twitch.js';
-import { SCOPES } from './config.js';
-import { Wheel } from './wheel.js';
-import { createBus } from './bus.js';
-import * as G from './giveaway.js';
-import { MATERIALS } from './materials.js';
+import * as tw from './twitch.js?v=5';
+import { SCOPES } from './config.js?v=5';
+import { Wheel } from './wheel.js?v=5';
+import { createBus } from './bus.js?v=5';
+import * as G from './giveaway.js?v=5';
+import { MATERIALS } from './materials.js?v=5';
 
 const $ = (id) => document.getElementById(id);
 const SETTINGS_KEY = 'trg.settings';
@@ -702,3 +702,4 @@ if (firstRun) {
   saveSettings();
   openSettings('entry');
 }
+window.__panelStarted = true; // встроенный скрипт в index.html проверяет, что пульт запустился
