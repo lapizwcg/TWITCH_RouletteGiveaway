@@ -1,10 +1,9 @@
-import { Wheel } from './wheel.js?v=5';
-import { createBus } from './bus.js?v=5';
-import { resultText } from './giveaway.js?v=5';
+import { Wheel } from './wheel.js?v=6';
+import { createBus } from './bus.js?v=6';
 
-// Параметры адреса: ?winners=0 — не показывать список победителей.
+// Параметры адреса: ?winners=1 — показывать список победителей в углу (по умолчанию выключен).
 const params = new URLSearchParams(location.search);
-const showWinners = params.get('winners') !== '0';
+const showWinners = params.get('winners') === '1';
 
 const $ = (id) => document.getElementById(id);
 // В OBS у страницы есть window.obsstudio; вне OBS фон тёмный, чтобы было что видно.
@@ -50,13 +49,11 @@ bus.send('hello');
 function applyState(s) {
   setIdle(s.phase === 'idle');
 
-  const kw = `<span class="kw">${escapeHtml(s.keyword)}</span>`;
+  // Сверху — только призыв во время регистрации; в остальное время строка пустая, но место за ней сохранено.
   $('header').innerHTML =
     s.phase === 'registration'
-      ? `Пишите ${kw} в чат<span class="count">${escapeHtml(s.rules)} Участников: ${s.count}</span>`
-      : s.phase === 'finished'
-        ? 'Розыгрыш завершён!'
-        : '';
+      ? `Пишите <span class="kw">${escapeHtml(s.keyword)}</span> в чат <span class="count">· участников: ${s.count}</span>`
+      : '';
 
   const key = entriesKey(s.entries);
   if (key !== shownEntries) {
@@ -69,7 +66,7 @@ function applyState(s) {
   const list = s.winners || [];
   $('winnersBox').hidden = !showWinners || !list.length;
   $('winners').innerHTML = list
-    .map((w) => `<li><span class="prize">${escapeHtml(w.prize)}</span><span class="name">${escapeHtml(w.name)}</span></li>`)
+    .map((w) => `<li><span class="prize">${escapeHtml(w.prize)}</span> <span class="name">${escapeHtml(w.name)}</span></li>`)
     .join('');
 }
 
@@ -90,13 +87,15 @@ async function onSpin(msg) {
   }
 }
 
+// Результат: главная строка крупно, места, выданные без прокрута, — второй строкой помельче.
 function showResult(r) {
   const el = $('result');
   if (!r) {
     el.className = 'result';
     return;
   }
-  el.textContent = resultText(r);
+  $('resultMain').textContent = r.kind === 'win' ? `🏆 ${r.prize} — ${r.name}` : `Выбывает: ${r.name}`;
+  $('resultSub').textContent = (r.also || []).map((a) => `${a.prize} — ${a.name}`).join('  ·  ');
   el.className = `result ${r.kind} show`;
 }
 

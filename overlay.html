@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Roulette Giveaway — оверлей</title>
-    <link rel="stylesheet" href="css/overlay.css?v=5" />
+    <link rel="stylesheet" href="css/overlay.css?v=6" />
   </head>
   <body>
     <!-- Подсказка видна сразу, без скриптов: если скрипты не загрузятся, она хотя бы скажет об этом. -->
@@ -25,19 +25,23 @@
           'Скрипты оверлея не загрузились. Обновите OBS до версии 28 или новее, в свойствах источника нажмите «Обновить кэш текущей страницы».';
       }, 6000);
     </script>
+    <!-- Три ряда фиксированной высоты: подсказка сверху, колесо, результат снизу. Ничего не выходит за рамку источника. -->
     <div id="root" class="root hidden">
-      <div id="header" class="header"></div>
-      <div class="main">
-        <div class="wheel-box">
-          <canvas id="wheel"></canvas>
-        </div>
+      <div class="slot"><div id="header" class="header"></div></div>
+      <div class="wheel-box">
+        <canvas id="wheel"></canvas>
         <aside id="winnersBox" class="winners-box" hidden>
           <h2>Победители</h2>
           <ol id="winners"></ol>
         </aside>
       </div>
-      <div id="result" class="result"></div>
+      <div class="slot">
+        <div id="result" class="result">
+          <div id="resultMain" class="result-main"></div>
+          <div id="resultSub" class="result-sub"></div>
+        </div>
+      </div>
     </div>
-    <script type="module" src="js/overlay.js?v=5"></script>
+    <script type="module" src="js/overlay.js?v=6"></script>
   </body>
 </html>

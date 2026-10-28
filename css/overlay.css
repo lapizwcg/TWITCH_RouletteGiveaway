@@ -1,4 +1,4 @@
-/* Оверлей для OBS: фон прозрачный, всё масштабируется от высоты кадра. */
+/* Оверлей для OBS: фон прозрачный, всё масштабируется от размера источника. */
 
 html,
 body {
@@ -48,13 +48,21 @@ body.preview {
   color: #adadb8;
 }
 
+/* Единица размера — от меньшей стороны источника (с поправкой на 16:9), поэтому оверлей
+   одинаково вписывается и в 1920×1080, и в квадрат, и в узкую полосу. */
+:root {
+  --u: min(1vh, 0.5625vw);
+}
+
 .root {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2vh;
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  padding: calc(var(--u) * 2);
+  display: grid;
+  /* Верх и низ фиксированной высоты: появление текста не двигает колесо. */
+  grid-template-rows: calc(var(--u) * 11) minmax(0, 1fr) calc(var(--u) * 15);
+  gap: calc(var(--u) * 1.5);
   transition: opacity 0.4s;
 }
 
@@ -62,15 +70,28 @@ body.preview {
   opacity: 0;
 }
 
+.slot {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- Верх: «Пишите … в чат» во время регистрации ---------- */
+
 .header {
-  font-size: 4.2vh;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: calc(var(--u) * 1.2) calc(var(--u) * 3.5);
+  border-radius: calc(var(--u) * 1.6);
+  background: rgba(14, 14, 16, 0.85);
+  border: calc(var(--u) * 0.3) solid #9146ff;
+  font-size: calc(var(--u) * 4.2);
   font-weight: 800;
-  text-align: center;
-  padding: 1vh 3vh;
-  border-radius: 1.4vh;
-  background: rgba(14, 14, 16, 0.82);
-  border: 0.3vh solid #9146ff;
-  text-shadow: 0 0.3vh 0.8vh rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 calc(var(--u) * 0.3) calc(var(--u) * 0.8) rgba(0, 0, 0, 0.6);
 }
 
 .header:empty {
@@ -82,21 +103,16 @@ body.preview {
 }
 
 .header .count {
-  display: block;
-  font-size: 2.6vh;
-  font-weight: 600;
   color: #adadb8;
+  font-weight: 600;
 }
 
-.main {
-  display: flex;
-  align-items: center;
-  gap: 4vh;
-}
+/* ---------- Колесо ---------- */
 
 .wheel-box {
-  width: 100vh;
-  height: 75vh;
+  position: relative;
+  min-height: 0;
+  min-width: 0;
 }
 
 #wheel {
@@ -105,18 +121,22 @@ body.preview {
   display: block;
 }
 
+/* Список победителей — только по ?winners=1, поверх правого верхнего угла, внутри рамки. */
 .winners-box {
-  min-width: 34vh;
-  max-width: 50vh;
-  padding: 2vh 2.6vh;
-  border-radius: 1.4vh;
-  background: rgba(14, 14, 16, 0.82);
-  border: 0.3vh solid rgba(255, 215, 0, 0.6);
+  position: absolute;
+  top: 0;
+  right: 0;
+  max-width: 30%;
+  box-sizing: border-box;
+  padding: calc(var(--u) * 1.6) calc(var(--u) * 2.2);
+  border-radius: calc(var(--u) * 1.4);
+  background: rgba(14, 14, 16, 0.85);
+  border: calc(var(--u) * 0.3) solid rgba(255, 215, 0, 0.6);
 }
 
 .winners-box h2 {
-  margin: 0 0 1.2vh;
-  font-size: 3vh;
+  margin: 0 0 calc(var(--u) * 1);
+  font-size: calc(var(--u) * 2.8);
   color: #ffd700;
 }
 
@@ -127,34 +147,35 @@ body.preview {
 }
 
 .winners-box li {
-  font-size: 2.5vh;
-  padding: 0.6vh 0;
-  border-bottom: 0.15vh solid rgba(255, 255, 255, 0.12);
-}
-
-.winners-box li:last-child {
-  border-bottom: 0;
+  padding: calc(var(--u) * 0.5) 0;
+  font-size: calc(var(--u) * 2.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .winners-box .prize {
-  display: block;
-  font-size: 1.9vh;
   color: #adadb8;
+  margin-right: 0.5em;
 }
 
 .winners-box .name {
   font-weight: 800;
 }
 
+/* ---------- Низ: результат прокрута ---------- */
+
 .result {
-  min-height: 7vh;
-  font-size: 5vh;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: calc(var(--u) * 1) calc(var(--u) * 4);
+  border-radius: calc(var(--u) * 1.6);
+  background: rgba(14, 14, 16, 0.88);
+  text-align: center;
   font-weight: 800;
-  padding: 1vh 4vh;
-  border-radius: 1.4vh;
-  text-shadow: 0 0.3vh 0.8vh rgba(0, 0, 0, 0.7);
+  text-shadow: 0 calc(var(--u) * 0.3) calc(var(--u) * 0.8) rgba(0, 0, 0, 0.7);
   opacity: 0;
-  transform: scale(0.85);
+  transform: scale(0.9);
   transition:
     opacity 0.25s,
     transform 0.25s;
@@ -165,24 +186,43 @@ body.preview {
   transform: scale(1);
 }
 
+.result-main,
+.result-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-main {
+  font-size: calc(var(--u) * 5);
+}
+
+.result-sub {
+  font-size: calc(var(--u) * 3);
+  opacity: 0.85;
+}
+
+.result-sub:empty {
+  display: none;
+}
+
 .result.win {
   color: #ffd700;
-  background: rgba(14, 14, 16, 0.85);
-  border: 0.35vh solid #ffd700;
+  border: calc(var(--u) * 0.35) solid #ffd700;
   animation: glow 1.2s ease-in-out infinite alternate;
 }
 
 .result.eliminate {
   color: #ff6b6b;
-  background: rgba(14, 14, 16, 0.85);
-  border: 0.35vh solid #ff4d4d;
+  border: calc(var(--u) * 0.35) solid #ff4d4d;
 }
 
 @keyframes glow {
   from {
-    box-shadow: 0 0 1vh rgba(255, 215, 0, 0.3);
+    box-shadow: 0 0 calc(var(--u) * 1) rgba(255, 215, 0, 0.3);
   }
   to {
-    box-shadow: 0 0 4vh rgba(255, 215, 0, 0.75);
+    box-shadow: 0 0 calc(var(--u) * 4) rgba(255, 215, 0, 0.75);
   }
 }
+

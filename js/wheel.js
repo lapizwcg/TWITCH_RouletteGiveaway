@@ -7,7 +7,7 @@
 
 import * as THREE from './vendor/three.module.js';
 import { RoomEnvironment } from './vendor/RoomEnvironment.js';
-import { MATERIALS } from './materials.js?v=5';
+import { MATERIALS } from './materials.js?v=6';
 
 const TAU = Math.PI * 2;
 const DRIFT = 0.12; // рад/с — в покое колесо медленно вращается, как настоящее
