@@ -7,6 +7,14 @@ const params = new URLSearchParams(location.search);
 const showWinners = params.get('winners') !== '0';
 
 const $ = (id) => document.getElementById(id);
+// В OBS у страницы есть window.obsstudio. Вне OBS показываем тёмный фон и подсказку, пока пульт молчит.
+const preview = !window.obsstudio;
+document.body.classList.toggle('preview', preview);
+const setIdle = (idle) => {
+  $('root').classList.toggle('hidden', idle);
+  $('hint').hidden = !(preview && idle);
+};
+setIdle(true);
 const wheel = new Wheel($('wheel'));
 let spinning = false;
 let pending = null; // состояние, пришедшее во время прокрута
@@ -22,7 +30,7 @@ const bus = createBus((msg) => {
 bus.send('hello');
 
 function applyState(s) {
-  $('root').classList.toggle('hidden', s.phase === 'idle');
+  setIdle(s.phase === 'idle');
 
   const kw = `<span class="kw">${escapeHtml(s.keyword)}</span>`;
   $('header').innerHTML =
@@ -48,7 +56,7 @@ function applyState(s) {
 }
 
 async function onSpin(msg) {
-  $('root').classList.remove('hidden');
+  setIdle(false);
   $('header').innerHTML = '';
   showResult(null);
   shownEntries = entriesKey(msg.entries);
