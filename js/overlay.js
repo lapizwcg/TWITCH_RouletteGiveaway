@@ -7,20 +7,38 @@ const params = new URLSearchParams(location.search);
 const showWinners = params.get('winners') !== '0';
 
 const $ = (id) => document.getElementById(id);
-// В OBS у страницы есть window.obsstudio. Вне OBS показываем тёмный фон и подсказку, пока пульт молчит.
+// В OBS у страницы есть window.obsstudio; вне OBS фон тёмный, чтобы было что видно.
 const preview = !window.obsstudio;
 document.body.classList.toggle('preview', preview);
-const setIdle = (idle) => {
+window.__overlayStarted = true; // встроенный скрипт в overlay.html проверяет, что модули вообще загрузились
+
+// Карточка-подсказка видна, пока от пульта не пришло ни одного сигнала — и в OBS тоже,
+// иначе пустую рамку не отличить от поломки. Когда пульт подключён, в OBS оверлей
+// прозрачен до начала розыгрыша, а в обычном браузере остаётся подсказка.
+let connected = false;
+let idle = true;
+const renderHint = () => {
   $('root').classList.toggle('hidden', idle);
-  $('hint').hidden = !(preview && idle);
+  $('hint').hidden = connected && !(preview && idle);
+  $('hintStatus').textContent = connected
+    ? 'Пульт подключён. Колесо появится, когда вы начнёте регистрацию.'
+    : 'Пульт не подключён: откройте его в этом же браузере (в OBS — как док-панель) с того же адреса.';
 };
-setIdle(true);
+const setIdle = (value) => {
+  idle = value;
+  renderHint();
+};
+renderHint();
 const wheel = new Wheel($('wheel'));
 let spinning = false;
 let pending = null; // состояние, пришедшее во время прокрута
 let shownEntries = '';
 
 const bus = createBus((msg) => {
+  if (!connected && (msg.type === 'spin' || msg.type === 'state')) {
+    connected = true;
+    renderHint();
+  }
   if (msg.type === 'spin') onSpin(msg);
   else if (msg.type === 'state') {
     if (spinning) pending = msg;

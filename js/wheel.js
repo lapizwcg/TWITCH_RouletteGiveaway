@@ -5,8 +5,8 @@
 // Угол a в мире — точка (cos a, ?, sin a). Ячейка i головы занимает углы [rotation + i*step, rotation + (i+1)*step].
 // Угол -π/2 — дальняя от зрителя сторона колеса (верх кадра).
 
-import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import * as THREE from './vendor/three.module.js';
+import { RoomEnvironment } from './vendor/RoomEnvironment.js';
 import { MATERIALS } from './materials.js';
 
 const TAU = Math.PI * 2;
