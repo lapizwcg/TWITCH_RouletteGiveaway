@@ -24,6 +24,10 @@ body {
   background: var(--bg);
   color: var(--text);
   font: 14px/1.45 'Segoe UI', Inter, system-ui, sans-serif;
+  /* Пульт занимает ровно высоту окна: колесо растягивается, кнопка всегда внизу. */
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 button,
@@ -140,11 +144,12 @@ h3 {
 /* ---------- Сетка ---------- */
 
 .layout {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
   gap: 16px;
   padding: 16px;
-  align-items: start;
 }
 
 .side {
@@ -152,12 +157,20 @@ h3 {
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+  min-height: 0;
 }
 
 @media (max-width: 860px) {
+  /* В узком окне колонки встают друг под друга, страница прокручивается. */
+  body {
+    height: auto;
+  }
   .layout {
     grid-template-columns: minmax(0, 1fr);
     padding: 12px;
+  }
+  .stage {
+    height: min(90vh, 760px);
   }
 }
 
@@ -428,8 +441,15 @@ textarea:disabled {
     0 4px 14px rgba(201, 154, 46, 0.35);
 }
 
+/* Все главные кнопки одной высоты — при смене этапа кнопка не прыгает. */
+.controls .btn {
+  height: 50px;
+  padding: 0 40px;
+  font-size: 17px;
+}
+
 #spin {
-  padding: 12px 56px;
+  padding: 0 56px;
   font-size: 18px;
   letter-spacing: 0.08em;
 }
@@ -502,6 +522,7 @@ textarea:disabled {
   align-items: center;
   gap: 10px;
   padding: 18px;
+  min-height: 0;
   background:
     radial-gradient(ellipse at 50% 45%, rgba(20, 90, 55, 0.35), transparent 65%),
     radial-gradient(ellipse at 50% 0%, rgba(145, 70, 255, 0.12), transparent 60%),
@@ -545,12 +566,15 @@ textarea:disabled {
   border-radius: 4px;
 }
 
+/* Колесо забирает всё свободное место по высоте; камера сама вписывает его в любые пропорции. */
 .wheel-wrap {
-  width: min(100%, 900px, calc((100vh - 240px) * 4 / 3));
-  min-width: 280px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
 }
 
 .stage-bottom {
+  flex: none;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -565,16 +589,29 @@ textarea:disabled {
 
 #wheel {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  height: 100%;
   display: block;
 }
 
+/* Место под плашку зарезервировано всегда, поэтому кнопка под ней не прыгает. */
 .result {
+  box-sizing: border-box;
+  height: 46px;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
   font-size: 20px;
   font-weight: 700;
-  padding: 8px 18px;
+  padding: 0 18px;
   border-radius: var(--radius);
-  text-align: center;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result.empty {
+  visibility: hidden;
 }
 
 .result.win {
@@ -596,10 +633,13 @@ textarea:disabled {
   justify-content: center;
 }
 
+/* Фиксированная высота: новые победители не сдвигают панель участников, лишние прокручиваются. */
 .winners {
   margin: 0;
   padding: 0;
   list-style: none;
+  height: 132px;
+  overflow-y: auto;
 }
 
 .winners li {
@@ -633,6 +673,8 @@ textarea:disabled {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+  min-height: 0;
 }
 
 .people-head {
@@ -678,7 +720,8 @@ textarea:disabled {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 52vh;
+  flex: 1;
+  min-height: 120px;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 6px;

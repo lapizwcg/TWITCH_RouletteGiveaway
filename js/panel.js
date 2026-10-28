@@ -511,11 +511,11 @@ function renderStage() {
   }
 
   const res = $('result');
-  res.hidden = !display.result || spinning;
-  if (display.result) {
-    res.className = `result ${display.result.kind}`;
-    res.textContent = G.resultText(display.result);
-  }
+  // Плашка не исчезает из разметки, а становится невидимой — так кнопка под ней остаётся на месте.
+  const showResult = display.result && !spinning;
+  res.className = `result ${showResult ? display.result.kind : 'empty'}`;
+  res.textContent = showResult ? G.resultText(display.result) : '';
+  res.title = res.textContent;
 
   // Внизу всегда одна главная кнопка по ходу розыгрыша; остальное — в окне настроек.
   const show = (id, cond) => ($(id).hidden = !cond);
