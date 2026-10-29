@@ -5,9 +5,9 @@
 // Угол a в мире — точка (cos a, ?, sin a). Ячейка i головы занимает углы [rotation + i*step, rotation + (i+1)*step].
 // Угол -π/2 — дальняя от зрителя сторона колеса (верх кадра).
 
-import * as THREE from './vendor/three.bundle.js?v=17';
-import { RoomEnvironment } from './vendor/three.bundle.js?v=17';
-import { drawHead } from './headart.js?v=17';
+import * as THREE from './vendor/three.bundle.js?v=18';
+import { RoomEnvironment } from './vendor/three.bundle.js?v=18';
+import { drawHead } from './headart.js?v=18';
 
 const TAU = Math.PI * 2;
 const MAX_FRETS = 256;
@@ -160,13 +160,13 @@ export class Wheel {
     const L = 0.8; // к этой доле времени шарик уже в ячейке
 
     const apply = (u) => {
-      this.rotation = rot0 + W * easeOutCubic(u);
+      // Колесо тормозит с постоянным трением: скорость падает равномерно до нуля. Кубическая кривая
+      // давала долгий «хвост», где колесо двигалось меньше пикселя за кадр и казалось, что оно дёргается.
+      this.rotation = rot0 + W * easeOutQuad(u);
       const x = Math.min(1, u / L);
-      let rel = relTarget + S * (1 - x) ** 2;
-      if (u > L) {
-        const p = (u - L) / (1 - L);
-        rel += step * 0.2 * Math.sin(p * Math.PI * 3) * (1 - p) ** 2; // покачивание в ячейке
-      }
+      // Шарик плавно догоняет свою ячейку и остаётся в ней — без покачивания туда-обратно: на медленном
+      // колесе оно выглядело как мелкие рывки.
+      const rel = relTarget + S * (1 - x) ** 2;
       let r;
       let hop = 0;
       if (u < 0.08) {
@@ -367,7 +367,7 @@ export class Wheel {
     this.jobs = new Map();
     this.jobId = 0;
     try {
-      this.worker = new Worker(new URL('./headart.worker.js?v=17', import.meta.url), { type: 'module' });
+      this.worker = new Worker(new URL('./headart.worker.js?v=18', import.meta.url), { type: 'module' });
       this.worker.onmessage = (e) => this.onPainted(e.data);
       this.worker.onerror = () => (this.worker = null); // нет OffscreenCanvas — рисуем в основном потоке
     } catch {
@@ -855,4 +855,5 @@ const smoothstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+const easeOutQuad = (t) => 1 - (1 - t) * (1 - t);
 const mod = (a, m) => ((a % m) + m) % m;
