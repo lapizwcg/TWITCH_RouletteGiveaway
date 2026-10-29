@@ -12,21 +12,29 @@ import * as THREE from './vendor/three.module.js';
 import { RoomEnvironment } from './vendor/RoomEnvironment.js';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
 import * as SkeletonUtils from './vendor/SkeletonUtils.js';
-import { MATERIALS } from './materials.js?v=9';
+import { MATERIALS } from './materials.js?v=10';
 
+// Текстура каждого персонажа KayKit — сетка 8×4 вертикальных градиентов («ячеек», по 128×256 пикселей):
+// каждая ячейка — отдельный материал модели (кожа, сталь, ткань, ремни), а тени зашиты в градиент.
+// Одна и та же ячейка у разных персонажей значит разное, поэтому для каждого явно перечислено,
+// какие ячейки — броня и одежда (их красим в материал участника). Кожа, волосы, глаза, кости,
+// кожаные ремни, пряжки и самоцветы остаются своими. Номера «столбец,строка» сняты по UV деталей
+// моделей (какая деталь какие ячейки использует).
 const CHARACTERS = [
-  'Knight',
-  'Barbarian',
-  'Mage',
-  'Ranger',
-  'Rogue',
-  'Rogue_Hooded',
-  'Skeleton_Warrior',
-  'Skeleton_Mage',
-  'Skeleton_Rogue',
-  'Skeleton_Minion',
+  { name: 'Knight', paint: ['3,0', '7,0', '2,1', '4,0', '7,1', '0,1'] }, // латы, шлем, кольчуга, плащ
+  { name: 'Barbarian', paint: ['7,0', '3,2', '7,1', '7,2', '3,0', '3,1', '2,1'] }, // мех, штаны, наручи
+  { name: 'Mage', paint: ['0,1', '1,1', '7,1', '2,1', '3,2'] }, // мантия, шляпа, плащ, штаны
+  { name: 'Ranger', paint: ['0,1', '7,0', '7,2', '3,2', '7,1', '5,0', '6,0'] }, // куртка, рубаха, плащ, штаны
+  { name: 'Rogue', paint: ['0,1', '1,1', '3,2', '7,1'] }, // куртка, плащ, штаны
+  { name: 'Rogue_Hooded', paint: ['0,1', '1,1', '3,2', '7,1'] }, // то же и капюшон с маской
+  { name: 'Skeleton_Warrior', paint: ['3,0', '4,0', '2,2'] }, // латы, шлем, плащ
+  { name: 'Skeleton_Mage', paint: ['2,2', '1,2', '3,2'] }, // мантия, шляпа
+  { name: 'Skeleton_Rogue', paint: ['2,2', '3,0', '7,0'] }, // капюшон, плащ, наплечники
+  { name: 'Skeleton_Minion', paint: ['5,0', '3,0'] }, // накидка, налокотники
 ];
-const modelUrl = (name) => new URL(`../assets/models/characters/${name}.glb`, import.meta.url).href;
+const CELL_COLS = 8;
+const CELL_ROWS = 4;
+const modelUrl = (c) => new URL(`../assets/models/characters/${c.name}.glb`, import.meta.url).href;
 const ANIMS_URL = new URL('../assets/models/kaykit_anims.glb', import.meta.url).href;
 const MAX_CELLS = 24;
 const CELL_W = 1.7;
@@ -198,63 +206,71 @@ export class Crowd {
   }
 
   /**
-   * Перекраска палитры KayKit: у них одна текстура из плоских цветных плашек. Плашки брони и одежды
-   * получают цвет материала участника (с сохранением светлоты — тени и детали на месте), а карта
-   * свойств делает их металлом/лаком этого материала. Тёмные (глаза, контуры), очень светлые (кости,
-   * блики) и тёплые телесные (кожа, светлые волосы) плашки не трогаем. Результат кешируется.
+   * Перекраска палитры KayKit по ячейкам. Ячейки брони и одежды (рецепт персонажа) получают цвет
+   * материала участника: градиент внутри ячейки сохраняется (тени и блики на месте), а разные ячейки
+   * сохраняют свою светлоту относительно друг друга — тёмные пластины остаются темнее светлых.
+   * Карта свойств делает покрашенное металлом или лаком этого материала. Результат кешируется.
    */
   recolor(material, kind, matIndex) {
-    if (!material.map) return material; // например, светящиеся глаза скелетов
+    if (!material.map) return material; // светящиеся глаза скелетов — без текстуры
     const key = `${kind}|${matIndex}|${material.name}`;
     if (this.recolored.has(key)) return this.recolored.get(key);
 
     const img = material.map.image;
     const w = img.width;
     const h = img.height;
+    const cw = w / CELL_COLS;
+    const ch = h / CELL_ROWS;
     const cv = document.createElement('canvas');
     cv.width = w;
     cv.height = h;
     const ctx = cv.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(img, 0, 0);
     const color = ctx.getImageData(0, 0, w, h);
+    const px = color.data;
     const orm = ctx.createImageData(w, h);
+    const out = orm.data;
     const m = MATERIALS[matIndex];
     const target = new THREE.Color(m.color);
-    const tl = Math.max(0.08, (target.r + target.g + target.b) / 3);
-    const px = color.data;
-    const out = orm.data;
-    for (let i = 0; i < px.length; i += 4) {
-      const r = px[i] / 255;
-      const g = px[i + 1] / 255;
-      const b = px[i + 2] / 255;
-      const hi = Math.max(r, g, b);
-      const lo = Math.min(r, g, b);
-      const l = (hi + lo) / 2;
-      const sat = hi === lo ? 0 : (hi - lo) / (1 - Math.abs(2 * l - 1));
-      let hue = 0;
-      if (hi !== lo) {
-        if (hi === r) hue = ((g - b) / (hi - lo) + 6) % 6;
-        else if (hi === g) hue = (b - r) / (hi - lo) + 2;
-        else hue = (r - g) / (hi - lo) + 4;
-        hue *= 60;
-      }
-      const skin = hue >= 8 && hue <= 50 && sat > 0.25 && l > 0.45;
-      const darkHair = hue >= 8 && hue <= 45 && sat > 0.2 && l < 0.36; // брови, бороды, тёмные волосы
-      const keep = l < 0.13 || l > 0.86 || skin || darkHair;
+    const lum = (i) => 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+
+    // Всё по умолчанию — не металл, шероховатость ~0.6.
+    for (let i = 0; i < out.length; i += 4) {
+      out[i + 1] = 150;
       out[i + 3] = 255;
-      if (keep) {
-        out[i + 1] = 150; // шероховатость ~0.6
-        out[i + 2] = 0; // не металл
-        continue;
-      }
-      // Светлота плашки переносится на цвет материала: светлая броня — светлый оттенок, тёмная — тёмный.
-      const k = Math.min(2.2, (0.35 + l) / (0.35 + tl * 0.9));
-      px[i] = Math.min(255, target.r * k * 255);
-      px[i + 1] = Math.min(255, target.g * k * 255);
-      px[i + 2] = Math.min(255, target.b * k * 255);
-      out[i + 1] = Math.round(Math.max(0.2, m.roughness) * 255);
-      out[i + 2] = Math.round(m.metalness * 255);
     }
+
+    const cells = CHARACTERS[kind].paint.map((s) => s.split(',').map(Number));
+    // Средняя светлота каждой покрашенной ячейки — чтобы сохранить разницу между ними.
+    const mean = cells.map(([cx, cy]) => {
+      let sum = 0;
+      let n = 0;
+      for (let y = cy * ch; y < (cy + 1) * ch; y += 4) {
+        for (let x = cx * cw; x < (cx + 1) * cw; x += 4) {
+          sum += lum((y * w + x) * 4);
+          n++;
+        }
+      }
+      return Math.max(1, sum / n);
+    });
+    const top = Math.max(...mean);
+
+    cells.forEach(([cx, cy], k) => {
+      const shade = Math.min(1, Math.max(0.3, (mean[k] / top) ** 0.7)); // светлота ячейки среди прочих
+      for (let y = cy * ch; y < (cy + 1) * ch; y++) {
+        for (let x = cx * cw; x < (cx + 1) * cw; x++) {
+          const i = (y * w + x) * 4;
+          const rel = Math.min(1.6, lum(i) / mean[k]); // форма градиента внутри ячейки
+          const f = shade * rel * 255;
+          px[i] = Math.min(255, target.r * f);
+          px[i + 1] = Math.min(255, target.g * f);
+          px[i + 2] = Math.min(255, target.b * f);
+          out[i + 1] = Math.round(Math.max(0.15, m.roughness) * 255);
+          out[i + 2] = Math.round(m.metalness * 255);
+        }
+      }
+    });
+
     ctx.putImageData(color, 0, 0);
     const map = new THREE.CanvasTexture(cv);
     const ormCanvas = document.createElement('canvas');
@@ -264,7 +280,9 @@ export class Crowd {
     const ormMap = new THREE.CanvasTexture(ormCanvas);
     for (const t of [map, ormMap]) {
       t.flipY = false; // как у текстур glTF
-      t.magFilter = THREE.NearestFilter; // палитра из плашек: без размытия на границах
+      t.magFilter = THREE.NearestFilter;
+      t.minFilter = THREE.NearestFilter; // ячейки не должны «подтекать» друг в друга на мип-уровнях
+      t.generateMipmaps = false;
     }
     map.colorSpace = THREE.SRGBColorSpace;
     const result = new THREE.MeshStandardMaterial({
