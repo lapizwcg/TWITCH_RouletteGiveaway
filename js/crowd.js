@@ -12,7 +12,8 @@ import * as THREE from './vendor/three.module.js';
 import { RoomEnvironment } from './vendor/RoomEnvironment.js';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
 import * as SkeletonUtils from './vendor/SkeletonUtils.js';
-import { MATERIALS } from './materials.js?v=12';
+import { MATERIALS } from './materials.js?v=13';
+import { splitName } from './wheel.js?v=13';
 
 // Текстура каждого персонажа KayKit — сетка 8×4 вертикальных градиентов («ячеек», по 128×256 пикселей):
 // каждая ячейка — отдельный материал модели (кожа, сталь, ткань, ремни), а тени зашиты в градиент.
@@ -207,8 +208,9 @@ export class Crowd {
     this.scene.add(root);
     const label = document.createElement('div');
     label.className = 'crowd-label';
-    label.textContent = p.name;
+    label.dataset.name = p.name;
     this.labelsEl.append(label);
+    queueMicrotask(() => this.fitLabel(this.people.get(p.id) || { label }));
 
     return { id: p.id, root, mixer, actions, current: actions.wave, label, materials: own, status: 'in', t: 0 };
   }
@@ -407,7 +409,7 @@ export class Crowd {
       const p = new THREE.Vector3(x, y, z).applyMatrix4(inv);
       [x0, x1, y0, y1] = [Math.min(x0, p.x), Math.max(x1, p.x), Math.min(y0, p.y), Math.max(y1, p.y)];
     }
-    y0 -= 0.8; // место под подписи у нижнего ряда
+    y0 -= 1.1; // место под подписи у нижнего ряда (до двух строк)
     const aspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
     let halfW = (x1 - x0) / 2;
     let halfH = (y1 - y0) / 2;
@@ -420,8 +422,37 @@ export class Crowd {
 
     // Подпись не шире своей ячейки, шрифт — от размера ячейки: при ступени вниз уменьшается вместе с сеткой.
     const cellPx = (CELL_W * this.canvas.clientWidth) / (2 * halfW);
-    this.labelsEl.style.setProperty('--label-max', `${Math.round(cellPx * 0.94)}px`);
-    this.labelsEl.style.setProperty('--label-font', `${Math.round(Math.min(24, Math.max(10, cellPx * 0.12)))}px`);
+    this.labelMax = cellPx * 0.94;
+    this.labelFont = Math.min(24, Math.max(11, cellPx * 0.12));
+    this.labelsEl.style.setProperty('--label-max', `${Math.round(this.labelMax)}px`);
+    for (const c of this.people.values()) this.fitLabel(c);
+  }
+
+  /**
+   * Ник целиком в своей ячейке и читаемый: сначала в одну строку обычным размером; если длинный —
+   * чуть уменьшаем (не мельче 80%); если всё равно не влезает — переносим на две строки в
+   * естественном месте («Neformalization_» / «Official», «xX» / «SlayerXx») и подбираем размер
+   * под обе. Ник Twitch — максимум 25 символов, двух строк хватает всегда.
+   */
+  fitLabel(c) {
+    if (!this.labelMax) return;
+    const name = c.label.dataset.name;
+    const base = this.labelFont;
+    const room = this.labelMax - base * 1.1; // за вычетом полей подписи (по 0.55em слева и справа)
+    const ctx = (this.measure ||= document.createElement('canvas').getContext('2d'));
+    ctx.font = `700 ${base}px 'Segoe UI', Inter, system-ui, sans-serif`;
+    const width = (t) => ctx.measureText(t).width;
+
+    let lines = [name];
+    let size = Math.min(base, (base * room) / width(name));
+    if (size < base * 0.8) {
+      const two = splitName(name);
+      const twoSize = Math.min(base, (base * room) / Math.max(width(two[0]), width(two[1])));
+      if (twoSize > size) [lines, size] = [two, twoSize];
+    }
+    c.label.textContent = lines.join('\n');
+    c.label.style.fontSize = `${Math.max(9, size).toFixed(1)}px`;
+    c.label.classList.toggle('two-lines', lines.length > 1);
   }
 }
 

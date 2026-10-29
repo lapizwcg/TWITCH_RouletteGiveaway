@@ -7,7 +7,7 @@
 
 import * as THREE from './vendor/three.module.js';
 import { RoomEnvironment } from './vendor/RoomEnvironment.js';
-import { MATERIALS } from './materials.js?v=12';
+import { MATERIALS } from './materials.js?v=13';
 
 const TAU = Math.PI * 2;
 const DRIFT = 0.12; // рад/с — в покое колесо медленно вращается, как настоящее
@@ -786,18 +786,29 @@ function fit(ctx, text, maxWidth) {
   return s + '…';
 }
 
-/** Делит ник на две строки: по «_», «-», «.» или пробелу ближе к середине, иначе ровно пополам. */
-function splitName(name) {
+/**
+ * Делит ник на две строки в самом естественном месте ближе к середине: после «_», «-», «.»,
+ * на пробеле, на стыке строчной и заглавной («Slayer|Xx») или букв и цифр («Bob|2026»); иначе пополам.
+ */
+export function splitName(name) {
   const mid = name.length / 2;
   let best = -1;
-  for (let i = 1; i < name.length - 1; i++) {
-    if ('_-. '.includes(name[i]) && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
+  let drop = 0; // сколько символов выкинуть на месте разреза (пробел)
+  const isLower = (c) => c !== c.toUpperCase() && c === c.toLowerCase();
+  const isUpper = (c) => c !== c.toLowerCase() && c === c.toUpperCase();
+  const isDigit = (c) => c >= '0' && c <= '9';
+  const consider = (cut, skip) => {
+    if (cut <= 0 || cut >= name.length) return;
+    if (best < 0 || Math.abs(cut - mid) < Math.abs(best - mid)) [best, drop] = [cut, skip];
+  };
+  for (let i = 1; i < name.length; i++) {
+    const a = name[i - 1];
+    const b = name[i];
+    if (b === ' ') consider(i, 1);
+    else if ('_-.'.includes(a)) consider(i, 0); // разделитель остаётся в конце первой строки
+    else if ((isLower(a) && isUpper(b)) || (isDigit(a) !== isDigit(b) && /[\p{L}\d]/u.test(a + b))) consider(i, 0);
   }
-  if (best > 0 && Math.abs(best - mid) <= name.length * 0.3) {
-    const sep = name[best];
-    // Подчёркивание оставляем в конце первой строки, пробел убираем.
-    return sep === ' ' ? [name.slice(0, best), name.slice(best + 1)] : [name.slice(0, best + 1), name.slice(best + 1)];
-  }
+  if (best > 0 && Math.abs(best - mid) <= name.length * 0.3) return [name.slice(0, best), name.slice(best + drop)];
   const cut = Math.ceil(mid);
   return [name.slice(0, cut), name.slice(cut)];
 }
