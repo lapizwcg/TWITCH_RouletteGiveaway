@@ -37,6 +37,7 @@ export {
   Scene,
   ShadowMaterial,
   SphereGeometry,
+  Texture,
   TorusGeometry,
   Vector2,
   Vector3,
