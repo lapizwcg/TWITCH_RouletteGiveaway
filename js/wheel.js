@@ -5,12 +5,13 @@
 // Угол a в мире — точка (cos a, ?, sin a). Ячейка i головы занимает углы [rotation + i*step, rotation + (i+1)*step].
 // Угол -π/2 — дальняя от зрителя сторона колеса (верх кадра).
 
-import * as THREE from './vendor/three.bundle.js?v=16';
-import { RoomEnvironment } from './vendor/three.bundle.js?v=16';
-import { drawHead } from './headart.js?v=16';
+import * as THREE from './vendor/three.bundle.js?v=17';
+import { RoomEnvironment } from './vendor/three.bundle.js?v=17';
+import { drawHead } from './headart.js?v=17';
 
 const TAU = Math.PI * 2;
 const MAX_FRETS = 256;
+const COLLAPSE_MS = 650; // за столько выбывший сектор сжимается в ноль, а соседние занимают его место
 const IDLE_FRAME_MS = 1000 / 30; // в покое (медленный дрейф, пульсация подсветки) хватает 30 кадров; прокрут — каждый кадр
 const DRIFT = 0.12; // рад/с — в покое колесо медленно вращается, как настоящее
 const R = {
@@ -105,10 +106,25 @@ export class Wheel {
       this.setHighlight(null);
       return;
     }
+    const prev = this.entries;
     this.entriesKey = key;
     this.entries = entries;
     this.highlight = null;
     const back = this.buffers[1 - this.front];
+    const removed = removedIndex(prev, entries);
+    if (removed >= 0 && this.buffers[this.front].key === entriesKey(prev)) {
+      // Выбыл один: его сектор плавно схлопывается, соседи занимают место; новая картинка
+      // (обычно уже заготовлена) подменит старую в конце, когда они совпадут.
+      this.hl.uHlIndex.value = -1;
+      this.collapse = { t0: performance.now(), oldCount: prev.length, removed, key };
+      this.hl.uWarpOn.value = 1;
+      this.hl.uOldCount.value = prev.length;
+      this.hl.uRemoved.value = removed;
+      this.hl.uWarpT.value = 0;
+      if (back.key !== key) this.paint(entries, false);
+      this.wake();
+      return;
+    }
     if (back.key === key) {
       this.swap(); // заготовка уже в видеокарте — только переключаем текстуры
       return;
@@ -208,6 +224,7 @@ export class Wheel {
     const a = this.ballAngle();
     this.ballMesh.position.set(Math.cos(a) * this.ball.r, this.ball.y, Math.sin(a) * this.ball.r);
     this.hl.uHlStrength.value = this.highlight ? 0.55 + 0.45 * Math.sin(now / 260) : 0;
+    if (this.collapse) this.stepCollapse(now);
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -350,7 +367,7 @@ export class Wheel {
     this.jobs = new Map();
     this.jobId = 0;
     try {
-      this.worker = new Worker(new URL('./headart.worker.js?v=16', import.meta.url), { type: 'module' });
+      this.worker = new Worker(new URL('./headart.worker.js?v=17', import.meta.url), { type: 'module' });
       this.worker.onmessage = (e) => this.onPainted(e.data);
       this.worker.onerror = () => (this.worker = null); // нет OffscreenCanvas — рисуем в основном потоке
     } catch {
@@ -363,6 +380,12 @@ export class Wheel {
       uHlCount: { value: 1 },
       uHlColor: { value: new THREE.Color() },
       uHlStrength: { value: 0 },
+      // Сжатие выбывшего сектора: старая картинка растягивается по углу, пока сектор uRemoved
+      // из uOldCount не схлопнется (uWarpT 0 → 1). Тогда она совпадает с новой и подменяется ею.
+      uWarpOn: { value: 0 },
+      uOldCount: { value: 2 },
+      uRemoved: { value: 0 },
+      uWarpT: { value: 0 },
     };
     this.headMaterial = new THREE.MeshStandardMaterial({
       map: this.buffers[0].tex,
@@ -378,8 +401,40 @@ export class Wheel {
       shader.fragmentShader = shader.fragmentShader
         .replace(
           '#include <common>',
-          '#include <common>\nuniform float uHlIndex;\nuniform float uHlCount;\nuniform vec3 uHlColor;\nuniform float uHlStrength;',
+          [
+            '#include <common>',
+            'uniform float uHlIndex;',
+            'uniform float uHlCount;',
+            'uniform vec3 uHlColor;',
+            'uniform float uHlStrength;',
+            'uniform float uWarpOn;',
+            'uniform float uOldCount;',
+            'uniform float uRemoved;',
+            'uniform float uWarpT;',
+            // Точка головы при раскладке «в процессе сжатия» → где она была на старой картинке.
+            'vec2 headWarp(vec2 uv) {',
+            '  if (uWarpOn < 0.5) return uv;',
+            `  vec2 p = vec2(uv.x - 0.5, 0.5 - uv.y) * ${glsl(2 * R.texture)};`,
+            '  float r = length(p);',
+            `  if (r < ${glsl(R.hub)}) return uv;`,
+            '  float a = mod(atan(p.y, p.x), 6.2831853);',
+            '  float so = 6.2831853 / uOldCount;',
+            '  float sn = 6.2831853 / max(uOldCount - 1.0, 1.0);',
+            '  float w = so + uWarpT * (sn - so);',
+            '  float wr = so * (1.0 - uWarpT);',
+            '  float before = uRemoved * w;',
+            '  float j; float f;',
+            '  if (a < before) { j = floor(a / w); f = a / w - j; }',
+            '  else if (a < before + wr) { j = uRemoved; f = (a - before) / max(wr, 1e-5); }',
+            '  else { float q = (a - before - wr) / w; j = uRemoved + 1.0 + floor(q); f = fract(q); }',
+            '  float ao = (j + f) * so;',
+            '  vec2 po = r * vec2(cos(ao), sin(ao));',
+            `  return vec2(0.5 + po.x / ${glsl(2 * R.texture)}, 0.5 - po.y / ${glsl(2 * R.texture)});`,
+            '}',
+          ].join('\n'),
         )
+        // Все выборки из карт головы — по растянутым координатам.
+        .replace('void main() {', 'void main() {\nvec2 hUv = headWarp(vMapUv);\n#define vMapUv hUv\n#define vRoughnessMapUv hUv\n#define vMetalnessMapUv hUv')
         .replace(
           '#include <emissivemap_fragment>',
           [
@@ -588,11 +643,13 @@ export class Wheel {
     back.key = job.key;
     back.count = job.count;
     // Переключаемся, только если этот список всё ещё нужен (за время рисования могли заказать другой).
-    if (job.swap && job.key === this.entriesKey) this.swap();
+    if (job.swap && job.key === this.entriesKey && !this.collapse) this.swap();
   }
 
   /** Переключение на запасной комплект: только смена ссылок на текстуры, без рисования и заливки. */
   swap() {
+    this.collapse = null;
+    this.hl.uWarpOn.value = 0;
     this.front = 1 - this.front;
     const buf = this.buffers[this.front];
     this.headMaterial.map = buf.tex;
@@ -624,6 +681,32 @@ export class Wheel {
    * и компилировало его заново — это и был фриз в начале каждого прокрута.
    */
   buildFrets(n) {
+    n = Math.min(n, MAX_FRETS);
+    this.placeFrets(Array.from({ length: n }, (_, i) => (i * TAU) / n), n);
+  }
+
+  /** Шаг сжатия выбывшего сектора: границы и перегородки едут, в конце — подмена картинки. */
+  stepCollapse(now) {
+    const c = this.collapse;
+    const u = Math.min(1, (now - c.t0) / COLLAPSE_MS);
+    const t = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2; // плавно разогнаться и затормозить
+    this.hl.uWarpT.value = t;
+    const so = TAU / c.oldCount;
+    const sn = TAU / (c.oldCount - 1);
+    const w = so + t * (sn - so);
+    const wr = so * (1 - t);
+    const angles = [];
+    let a = 0;
+    for (let i = 0; i < c.oldCount; i++) {
+      angles.push(a);
+      a += i === c.removed ? wr : w;
+    }
+    this.placeFrets(angles, c.oldCount);
+    // Сжатие закончилось — подменяем на новую картинку, как только она готова (обычно уже).
+    if (u >= 1 && this.buffers[1 - this.front].key === c.key) this.swap();
+  }
+
+  placeFrets(angles, countForThickness) {
     if (!this.frets) {
       const geo = new THREE.BoxGeometry(R.headOuter - R.pocketInner, 0.06, 1); // толщина задаётся масштабом
       this.frets = new THREE.InstancedMesh(geo, this.gold, MAX_FRETS);
@@ -631,15 +714,15 @@ export class Wheel {
       this.frets.receiveShadow = true;
       this.head.add(this.frets);
     }
-    n = Math.min(n, MAX_FRETS);
-    const thickness = n > 150 ? 0.003 : n > 60 ? 0.006 : 0.011;
+    const n = Math.min(angles.length, MAX_FRETS);
+    const thickness = countForThickness > 150 ? 0.003 : countForThickness > 60 ? 0.006 : 0.011;
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const up = new THREE.Vector3(0, 1, 0);
     const scale = new THREE.Vector3(1, 1, thickness);
     const mid = (R.pocketInner + R.headOuter) / 2;
     for (let i = 0; i < n; i++) {
-      const a = (i * TAU) / n;
+      const a = angles[i];
       q.setFromAxisAngle(up, -a);
       m.compose(new THREE.Vector3(Math.cos(a) * mid, 0.03, Math.sin(a) * mid), q, scale);
       this.frets.setMatrixAt(i, m);
@@ -745,6 +828,17 @@ function woodTexture(aniso) {
 
 
 
+
+/** Индекс единственного выбывшего элемента (остальные — те же и в том же порядке), иначе −1. */
+function removedIndex(prev, next) {
+  if (!prev || prev.length !== next.length + 1 || prev.length < 2) return -1;
+  let i = 0;
+  while (i < next.length && prev[i].name === next[i].name && prev[i].mat === next[i].mat) i++;
+  for (let j = i; j < next.length; j++) {
+    if (prev[j + 1].name !== next[j].name || prev[j + 1].mat !== next[j].mat) return -1;
+  }
+  return i;
+}
 
 function entriesKey(entries) {
   return entries.map((e) => `${e.mat}:${e.name}`).join('|');
