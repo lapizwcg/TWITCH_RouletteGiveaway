@@ -1,10 +1,10 @@
-import * as tw from './twitch.js?v=19';
-import { SCOPES } from './config.js?v=19';
-import { Wheel } from './wheel.js?v=19';
-import { createBus } from './bus.js?v=19';
-import * as G from './giveaway.js?v=19';
-import { MATERIALS } from './materials.js?v=19';
-import { mark } from './perfhud.js?v=19';
+import * as tw from './twitch.js?v=20';
+import { SCOPES } from './config.js?v=20';
+import { Wheel } from './wheel.js?v=20';
+import { createBus } from './bus.js?v=20';
+import * as G from './giveaway.js?v=20';
+import { MATERIALS } from './materials.js?v=20';
+import { mark, DEBUG } from './perfhud.js?v=20';
 
 const $ = (id) => document.getElementById(id);
 const SETTINGS_KEY = 'trg.settings';
@@ -41,6 +41,8 @@ let byId = new Map(g.participants.map((p) => [p.id, p]));
 let session = null;
 let helix = null;
 let chat = null;
+let events = null; // события Twitch: новые фоллоу и сабы
+const RECHECK_MS = 12000; // отклонённого перепроверяем по повторному слову не чаще раза в 12 с
 let spinning = false;
 let autoRunning = false;
 let autoTimer = null;
@@ -158,6 +160,7 @@ async function initSession() {
     const missing = SCOPES.filter((s) => !session.scopes.includes(s));
     if (missing.length) showNotice('Приложению не хватает разрешений. Выйдите и войдите снова.', true);
     chat = new tw.ChatReader(session.login, onChatMessage, renderChatStatus);
+    events = new tw.EventSub(helix, onTwitchEvent);
     requeueChecks();
   }
   renderAccount();
@@ -175,6 +178,7 @@ async function renderAccount() {
   $('me').textContent = session.login;
   $('logout').addEventListener('click', async () => {
     chat?.close();
+    events?.close();
     await tw.logout(session);
     location.reload();
   });
@@ -209,7 +213,42 @@ function renderChatStatus(status) {
 function onChatMessage(msg) {
   if (g.phase !== 'registration' || !msg.userId) return;
   if (!G.matchesKeyword(msg.text, settings)) return;
+  // Повторное слово записанного участника ничего не добавляет (защита от накрутки по Twitch ID).
+  // Но если его отклонили — проверяем заново: вдруг он только что подписался.
+  const p = byId.get(msg.userId);
+  if (p) return void recheck(p);
   register({ id: msg.userId, login: msg.login, name: msg.name });
+}
+
+/** Перепроверка отклонённого участника (не чаще раза в RECHECK_MS). */
+function recheck(p) {
+  if (p.status !== 'rejected' || p.test || hasResults()) return;
+  if (Date.now() - (p.checkedAt || 0) < RECHECK_MS) return;
+  p.status = 'checking';
+  p.reason = 'перепроверка';
+  enqueueCheck(p.id);
+  renderSoon();
+}
+
+/**
+ * Новый фоллоу или саб на канале. Если это отклонённый участник открытой регистрации и теперь он
+ * подходит под условия — допускаем сразу, без повторного сообщения в чате.
+ */
+function onTwitchEvent(ev) {
+  mark(`Twitch: ${ev.type} ${ev.login}`);
+  if (g.phase !== 'registration') return;
+  const p = byId.get(ev.userId);
+  if (!p || p.status !== 'rejected') return;
+  const fits =
+    (ev.type === 'follow' && settings.eligibility === 'followers' && !(settings.minFollowDays > 0)) ||
+    (ev.type === 'subscribe' && settings.eligibility === 'subs');
+  if (!fits) return; // например, нужен стаж фоллоу — новый фоллоу его не даёт
+  p.status = 'ok';
+  p.reason = ev.type === 'follow' ? 'фоллоу только что' : 'саб только что';
+  p.checkedAt = Date.now();
+  saveGiveaway();
+  renderSoon();
+  toast(`${p.name} ${ev.type === 'follow' ? 'зафолловил' : 'подписался'} — допущен к розыгрышу`);
 }
 
 // ---------- Участники ----------
@@ -255,6 +294,7 @@ async function checkOne(id) {
   if (!p || p.status !== 'checking') return;
   const needsApi = !p.test && settings.eligibility !== 'all';
   if (needsApi && !helix) return; // проверим после входа
+  p.checkedAt = Date.now();
   try {
     Object.assign(p, needsApi ? await checkEligibility(p) : { status: 'ok', reason: '' });
   } catch (e) {
@@ -736,4 +776,6 @@ if (firstRun) {
   openSettings('entry');
 }
 $('appVersion').textContent = window.__appVersion ? `v${window.__appVersion}` : '';
+// В режиме ?debug=1 — ручной ввод сообщений чата и событий Twitch (проверка сценариев без стрима).
+if (DEBUG) window.__roulette = { chat: onChatMessage, twitchEvent: onTwitchEvent, participant: (id) => byId.get(id) };
 window.__panelStarted = true; // встроенный скрипт в index.html проверяет, что пульт запустился

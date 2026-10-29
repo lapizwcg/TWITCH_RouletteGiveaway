@@ -1,4 +1,4 @@
-import { CLIENT_ID, SCOPES } from './config.js?v=19';
+import { CLIENT_ID, SCOPES } from './config.js?v=20';
 
 const TOKEN_KEY = 'trg.token';
 const STATE_KEY = 'trg.oauthState';
@@ -122,6 +122,93 @@ export class Helix {
     });
     const result = json?.data?.[0];
     if (result && !result.is_sent) throw new Error(result.drop_reason?.message || 'Сообщение не отправлено');
+  }
+}
+
+// ---------- События канала (EventSub через WebSocket) ----------
+
+const EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws';
+
+/**
+ * Новые фоллоу и сабы канала в реальном времени. onEvent({ type: 'follow' | 'subscribe', userId, login, name }).
+ * Права уже есть у входа: moderator:read:followers (фоллоу) и channel:read:subscriptions (сабы).
+ */
+export class EventSub {
+  constructor(helix, onEvent, onStatus = () => {}) {
+    this.helix = helix;
+    this.onEvent = onEvent;
+    this.onStatus = onStatus;
+    this.closed = false;
+    this.retry = 0;
+    this.errors = [];
+    this.connect(EVENTSUB_URL, false);
+    // Twitch присылает keepalive; если долго тишина — соединение умерло, переподключаемся.
+    this.watchdog = setInterval(() => {
+      if (this.ws && Date.now() - this.lastMessage > (this.keepalive + 10) * 1000) this.ws.close();
+    }, 5000);
+  }
+
+  connect(url, isReconnect) {
+    const ws = new WebSocket(url);
+    this.ws = ws;
+    this.lastMessage = Date.now();
+    this.keepalive = 30;
+    ws.onmessage = async (e) => {
+      this.lastMessage = Date.now();
+      const msg = JSON.parse(e.data);
+      const type = msg.metadata?.message_type;
+      if (type === 'session_welcome') {
+        this.retry = 0;
+        this.keepalive = msg.payload.session.keepalive_timeout_seconds || 30;
+        // При переезде по session_reconnect подписки переносятся сами — заново оформлять не нужно.
+        if (!isReconnect) await this.subscribe(msg.payload.session.id);
+        this.onStatus('connected');
+      } else if (type === 'session_reconnect') {
+        const old = ws;
+        old.onclose = null;
+        this.connect(msg.payload.session.reconnect_url, true);
+        setTimeout(() => old.close(), 2000);
+      } else if (type === 'notification') {
+        const ev = msg.payload.event;
+        const sub = msg.payload.subscription.type;
+        this.onEvent({
+          type: sub === 'channel.follow' ? 'follow' : 'subscribe',
+          userId: ev.user_id,
+          login: ev.user_login,
+          name: ev.user_name,
+        });
+      }
+    };
+    ws.onclose = () => {
+      if (this.closed || this.ws !== ws) return;
+      this.onStatus('reconnecting');
+      const delay = Math.min(30000, 1000 * 2 ** this.retry++);
+      setTimeout(() => !this.closed && this.connect(EVENTSUB_URL, false), delay);
+    };
+  }
+
+  async subscribe(sessionId) {
+    const b = this.helix.session.userId;
+    const subs = [
+      { type: 'channel.follow', version: '2', condition: { broadcaster_user_id: b, moderator_user_id: b } },
+      { type: 'channel.subscribe', version: '1', condition: { broadcaster_user_id: b } },
+    ];
+    for (const s of subs) {
+      try {
+        await this.helix.request('eventsub/subscriptions', {
+          method: 'POST',
+          body: { ...s, transport: { method: 'websocket', session_id: sessionId } },
+        });
+      } catch (e) {
+        this.errors.push(`${s.type}: ${e.message}`);
+      }
+    }
+  }
+
+  close() {
+    this.closed = true;
+    clearInterval(this.watchdog);
+    this.ws?.close();
   }
 }
 
