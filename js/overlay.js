@@ -1,7 +1,7 @@
-import { Wheel } from './wheel.js?v=13';
-import { createBus } from './bus.js?v=13';
-import { Crowd } from './crowd.js?v=13';
-import { MATERIALS } from './materials.js?v=13';
+import { Wheel } from './wheel.js?v=14';
+import { createBus } from './bus.js?v=14';
+import { Crowd } from './crowd.js?v=14';
+import { MATERIALS } from './materials.js?v=14';
 
 const $ = (id) => document.getElementById(id);
 // В OBS у страницы есть window.obsstudio; вне OBS фон тёмный, чтобы было что видно.
@@ -24,10 +24,16 @@ const renderHint = () => {
 const setIdle = (value) => {
   idle = value;
   renderHint();
+  // Пока розыгрыша нет, оверлей прозрачен — обе 3D-сцены спят и не нагружают видеокарту.
+  wheel?.setActive(!idle);
+  crowd?.setActive(!idle);
 };
 renderHint();
 const wheel = new Wheel($('wheel'));
 const crowd = new Crowd($('crowd'), $('crowdLabels'));
+// До первого сигнала пульта розыгрыша нет — сцены сразу спят.
+wheel.setActive(false);
+crowd.setActive(false);
 let roster = [];
 let spinning = false;
 let pending = null; // состояние, пришедшее во время прокрута

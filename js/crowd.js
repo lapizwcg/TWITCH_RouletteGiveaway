@@ -8,12 +8,10 @@
 // как трибуна, поэтому никто никого не загораживает. Камера ортографическая и почти фронтальная:
 // все ячейки одного размера, ни один ряд не мельче другого.
 
-import * as THREE from './vendor/three.module.js';
-import { RoomEnvironment } from './vendor/RoomEnvironment.js';
-import { GLTFLoader } from './vendor/GLTFLoader.js';
-import * as SkeletonUtils from './vendor/SkeletonUtils.js';
-import { MATERIALS } from './materials.js?v=13';
-import { splitName } from './wheel.js?v=13';
+import * as THREE from './vendor/three.bundle.js?v=14';
+import { RoomEnvironment, GLTFLoader, MeshoptDecoder, cloneSkinned } from './vendor/three.bundle.js?v=14';
+import { MATERIALS } from './materials.js?v=14';
+import { splitName } from './wheel.js?v=14';
 
 // Текстура каждого персонажа KayKit — сетка 8×4 вертикальных градиентов («ячеек», по 128×256 пикселей):
 // каждая ячейка — отдельный материал модели (кожа, сталь, ткань, ремни), а тени зашиты в градиент.
@@ -50,6 +48,9 @@ const BASE_CAPACITY = 4;
 const CAPACITY_STEP = 2;
 const FADE_AFTER = 1.6; // секунд лежит выбывший, прежде чем исчезнуть
 const FADE_TIME = 0.6;
+const FRAME_MS = 1000 / 30; // толпе хватает 30 кадров в секунду — на глаз не отличить, а видеокарте вдвое легче
+const SPAWNS_PER_FRAME = 2; // новые участники появляются по паре за кадр — без подвисаний на больших розыгрышах
+const PALETTE_SIZE = 256; // палитра — плоские градиенты, 256×256 хватает с запасом (оригинал 1024×1024)
 
 export class Crowd {
   constructor(canvas, labelsEl) {
@@ -59,7 +60,11 @@ export class Crowd {
     this.cells = []; // id участников по ячейкам
     this.extra = 0;
     this.ready = false;
+    this.active = true;
+    this.raf = 0;
+    this.queue = []; // участники, ждущие появления
     this.last = performance.now();
+    this.lastRender = 0;
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -79,10 +84,13 @@ export class Crowd {
     // Мягкое пятно тени под каждым — вместо карты теней: полки висят в воздухе, падать тени некуда.
     this.blobTexture = blobTexture();
 
-    const loader = new GLTFLoader();
+    // Модели сжаты gltfpack (meshopt), поэтому загрузчику нужен распаковщик.
+    this.loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     this.recolored = new Map(); // «персонаж|материал» → перекрашенные материалы
-    Promise.all([loader.loadAsync(ANIMS_URL), ...CHARACTERS.map((n) => loader.loadAsync(modelUrl(n)))]).then(([anims, ...models]) => {
-      this.templates = models.map((m) => m.scene);
+    // Персонажи грузятся по требованию: только те, что выпали участникам.
+    this.templates = new Array(CHARACTERS.length);
+    this.loading = new Map();
+    this.loader.loadAsync(ANIMS_URL).then((anims) => {
       this.clips = Object.fromEntries(anims.animations.map((a) => [a.name, a]));
       this.ready = true;
       this.sync();
@@ -90,7 +98,34 @@ export class Crowd {
 
     new ResizeObserver(() => this.resize()).observe(canvas);
     this.resize();
-    requestAnimationFrame((t) => this.loop(t));
+    this.wake();
+  }
+
+  /** Оверлей прозрачен (розыгрыша нет) — не рисуем вообще, видеокарта свободна для стрима. */
+  setActive(active) {
+    this.active = active;
+    if (active) this.wake();
+  }
+
+  wake() {
+    if (this.raf) return;
+    this.last = performance.now();
+    this.raf = requestAnimationFrame((t) => this.loop(t));
+  }
+
+  /** Модель персонажа: из кеша или загрузка (один раз на вид персонажа). */
+  template(kind) {
+    if (this.templates[kind]) return this.templates[kind];
+    if (!this.loading.has(kind)) {
+      this.loading.set(
+        kind,
+        this.loader.loadAsync(modelUrl(CHARACTERS[kind])).then((m) => {
+          this.templates[kind] = m.scene;
+          this.sync();
+        }),
+      );
+    }
+    return null;
   }
 
   /** list: [{ id, name, mat, status: 'in' | 'out' | 'win' }] — весь состав розыгрыша в порядке записи. */
@@ -114,16 +149,38 @@ export class Crowd {
       this.cells = ids;
       this.layoutGrid();
     }
+    this.wanted = new Map(shown.map((p) => [p.id, p]));
     for (const p of shown) {
-      let c = this.people.get(p.id);
-      if (!c) {
-        c = this.spawn(p);
-        this.people.set(p.id, c);
-        this.placeInCell(c);
-      }
-      this.setStatus(c, p.status);
+      const c = this.people.get(p.id);
+      if (c) this.setStatus(c, p.status);
+      else if (!this.queue.includes(p.id)) this.queue.push(p.id); // появится в ближайших кадрах
     }
     this.renderExtra();
+    this.wake();
+  }
+
+  /** Появление участников из очереди — понемногу за кадр. Пока модель грузится, ячейка пустая. */
+  spawnQueued() {
+    let budget = SPAWNS_PER_FRAME;
+    for (let i = 0; i < this.queue.length && budget > 0; ) {
+      const p = this.wanted?.get(this.queue[i]);
+      if (!p || this.people.has(p.id)) {
+        this.queue.splice(i, 1);
+        continue;
+      }
+      const kind = hash(p.id) % CHARACTERS.length;
+      if (!this.template(kind)) {
+        i++;
+        continue;
+      }
+      const c = this.spawn(p, kind);
+      this.people.set(p.id, c);
+      this.placeInCell(c);
+      this.setStatus(c, p.status);
+      this.fitLabel(c);
+      this.queue.splice(i, 1);
+      budget--;
+    }
   }
 
   layoutGrid() {
@@ -156,10 +213,9 @@ export class Crowd {
     if (i >= 0) c.root.position.copy(this.cellPos(i));
   }
 
-  spawn(p) {
+  spawn(p, kind) {
     // Персонаж выбирается по участнику (всегда один и тот же для того же ника), материал — его с колеса.
-    const kind = hash(p.id) % CHARACTERS.length;
-    const root = SkeletonUtils.clone(this.templates[kind]);
+    const root = cloneSkinned(this.templates[kind]);
     const m = MATERIALS[p.mat % MATERIALS.length];
     const own = [];
     root.traverse((o) => {
@@ -210,7 +266,6 @@ export class Crowd {
     label.className = 'crowd-label';
     label.dataset.name = p.name;
     this.labelsEl.append(label);
-    queueMicrotask(() => this.fitLabel(this.people.get(p.id) || { label }));
 
     return { id: p.id, root, mixer, actions, current: actions.wave, label, materials: own, status: 'in', t: 0 };
   }
@@ -226,16 +281,17 @@ export class Crowd {
     const key = `${kind}|${matIndex}|${material.name}`;
     if (this.recolored.has(key)) return this.recolored.get(key);
 
+    // Работаем с уменьшенной копией палитры: градиенты плоские, а пикселей в 16 раз меньше.
     const img = material.map.image;
-    const w = img.width;
-    const h = img.height;
+    const w = PALETTE_SIZE;
+    const h = PALETTE_SIZE;
     const cw = w / CELL_COLS;
     const ch = h / CELL_ROWS;
     const cv = document.createElement('canvas');
     cv.width = w;
     cv.height = h;
     const ctx = cv.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, 0, 0, w, h);
     const color = ctx.getImageData(0, 0, w, h);
     const px = color.data;
     const orm = ctx.createImageData(w, h);
@@ -255,8 +311,8 @@ export class Crowd {
     const mean = cells.map(([cx, cy]) => {
       let sum = 0;
       let n = 0;
-      for (let y = cy * ch; y < (cy + 1) * ch; y += 4) {
-        for (let x = cx * cw; x < (cx + 1) * cw; x += 4) {
+      for (let y = cy * ch; y < (cy + 1) * ch; y += 2) {
+        for (let x = cx * cw; x < (cx + 1) * cw; x += 2) {
           sum += lum((y * w + x) * 4);
           n++;
         }
@@ -288,8 +344,16 @@ export class Crowd {
     ormCanvas.height = h;
     ormCanvas.getContext('2d').putImageData(orm, 0, 0);
     const ormMap = new THREE.CanvasTexture(ormCanvas);
+    const src = material.map;
     for (const t of [map, ormMap]) {
       t.flipY = false; // как у текстур glTF
+      // gltfpack упаковывает UV и компенсирует это преобразованием текстуры (KHR_texture_transform) —
+      // переносим его, иначе раскраска съедет.
+      t.offset.copy(src.offset);
+      t.repeat.copy(src.repeat);
+      t.center.copy(src.center);
+      t.rotation = src.rotation;
+      t.channel = src.channel;
       t.magFilter = THREE.NearestFilter;
       t.minFilter = THREE.NearestFilter; // ячейки не должны «подтекать» друг в друга на мип-уровнях
       t.generateMipmaps = false;
@@ -342,8 +406,14 @@ export class Crowd {
   }
 
   loop(now) {
+    this.raf = 0;
+    if (!this.active) return; // оверлей скрыт — цикл стоит, пока его не разбудят
+    this.raf = requestAnimationFrame((t) => this.loop(t));
+    if (now - this.lastRender < FRAME_MS - 2) return;
+    this.lastRender = now;
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
+    this.spawnQueued();
     for (const c of this.people.values()) {
       c.t += dt;
       c.mixer.update(dt);
@@ -359,7 +429,6 @@ export class Crowd {
     }
     this.renderer.render(this.scene, this.camera);
     this.placeLabels();
-    requestAnimationFrame((t) => this.loop(t));
   }
 
   placeLabels() {

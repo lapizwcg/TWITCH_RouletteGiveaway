@@ -5,11 +5,12 @@
 // Угол a в мире — точка (cos a, ?, sin a). Ячейка i головы занимает углы [rotation + i*step, rotation + (i+1)*step].
 // Угол -π/2 — дальняя от зрителя сторона колеса (верх кадра).
 
-import * as THREE from './vendor/three.module.js';
-import { RoomEnvironment } from './vendor/RoomEnvironment.js';
-import { MATERIALS } from './materials.js?v=13';
+import * as THREE from './vendor/three.bundle.js?v=14';
+import { RoomEnvironment } from './vendor/three.bundle.js?v=14';
+import { MATERIALS } from './materials.js?v=14';
 
 const TAU = Math.PI * 2;
+const IDLE_FRAME_MS = 1000 / 30; // в покое (медленный дрейф, пульсация подсветки) хватает 30 кадров; прокрут — каждый кадр
 const DRIFT = 0.12; // рад/с — в покое колесо медленно вращается, как настоящее
 const R = {
   rimOuter: 1,
@@ -37,7 +38,10 @@ export class Wheel {
     this.highlight = null; // { index, kind: 'eliminate' | 'win' }
     this.ball = { mode: 'track', angle: -Math.PI / 2, r: TRACK_R, y: trackY(TRACK_R) + BALL };
     this.anim = null;
+    this.active = true;
+    this.raf = 0;
     this.last = performance.now();
+    this.lastRender = 0;
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -62,7 +66,19 @@ export class Wheel {
 
     new ResizeObserver(() => this.resize()).observe(canvas);
     this.resize();
-    requestAnimationFrame((t) => this.loop(t));
+    this.wake();
+  }
+
+  /** Колесо не видно (оверлей прозрачен) — не рисуем вообще, видеокарта свободна для стрима. */
+  setActive(active) {
+    this.active = active;
+    if (active) this.wake();
+  }
+
+  wake() {
+    if (this.raf) return;
+    this.last = performance.now();
+    this.raf = requestAnimationFrame((t) => this.loop(t));
   }
 
   get spinning() {
@@ -148,6 +164,7 @@ export class Wheel {
       };
       const anim = { t0: performance.now(), duration, apply, finish };
       this.anim = anim;
+      this.wake();
       setTimeout(finish, duration);
     });
   }
@@ -155,6 +172,11 @@ export class Wheel {
   // ---------- Кадр ----------
 
   loop(now) {
+    this.raf = 0;
+    if (!this.active && !this.anim) return; // скрыто — цикл стоит, пока его не разбудят
+    this.raf = requestAnimationFrame((t) => this.loop(t));
+    if (!this.anim && now - this.lastRender < IDLE_FRAME_MS - 2) return;
+    this.lastRender = now;
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     if (this.anim) {
@@ -172,7 +194,6 @@ export class Wheel {
     this.headMaterial.emissiveIntensity = this.highlight ? 0.55 + 0.45 * Math.sin(now / 260) : 0;
 
     this.renderer.render(this.scene, this.camera);
-    requestAnimationFrame((t) => this.loop(t));
   }
 
   resize() {
