@@ -1,6 +1,6 @@
 // Фоновый поток: рисует голову колеса (ники с обводкой — самая дорогая часть, 100+ мс на 2048×2048)
 // на OffscreenCanvas и отдаёт готовые картинки. Основной поток в это время спокойно крутит колесо.
-import { drawHead } from './headart.js?v=18';
+import { drawHead } from './headart.js?v=19';
 
 const color = new OffscreenCanvas(2048, 2048);
 const orm = new OffscreenCanvas(512, 512);

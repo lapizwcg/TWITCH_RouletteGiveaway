@@ -8,10 +8,11 @@
 // как трибуна, поэтому никто никого не загораживает. Камера ортографическая и почти фронтальная:
 // все ячейки одного размера, ни один ряд не мельче другого.
 
-import * as THREE from './vendor/three.bundle.js?v=18';
-import { RoomEnvironment, GLTFLoader, MeshoptDecoder, cloneSkinned } from './vendor/three.bundle.js?v=18';
-import { MATERIALS } from './materials.js?v=18';
-import { splitName } from './headart.js?v=18';
+import * as THREE from './vendor/three.bundle.js?v=19';
+import { RoomEnvironment, GLTFLoader, MeshoptDecoder, cloneSkinned } from './vendor/three.bundle.js?v=19';
+import { MATERIALS } from './materials.js?v=19';
+import { splitName } from './headart.js?v=19';
+import { mark } from './perfhud.js?v=19';
 
 // Текстура каждого персонажа KayKit — сетка 8×4 вертикальных градиентов («ячеек», по 128×256 пикселей):
 // каждая ячейка — отдельный материал модели (кожа, сталь, ткань, ремни), а тени зашиты в градиент.
@@ -120,6 +121,7 @@ export class Crowd {
       this.loading.set(
         kind,
         this.loader.loadAsync(modelUrl(CHARACTERS[kind])).then((m) => {
+          mark(`толпа: загружен ${CHARACTERS[kind].name}`);
           this.templates[kind] = m.scene;
           this.sync();
         }),
@@ -173,6 +175,7 @@ export class Crowd {
         i++;
         continue;
       }
+      mark('толпа: появление участника');
       const c = this.spawn(p, kind);
       this.people.set(p.id, c);
       this.placeInCell(c);

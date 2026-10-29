@@ -68,6 +68,12 @@ h3 {
   font-size: 16px;
 }
 
+.app-version {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .brand-mark {
   width: 18px;
   height: 18px;

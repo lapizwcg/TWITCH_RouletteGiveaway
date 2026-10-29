@@ -4,13 +4,33 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Roulette Giveaway — пульт</title>
-    <link rel="stylesheet" href="css/panel.css?v=18" />
+    <link rel="stylesheet" href="css/panel.css?v=19" />
+    <!-- Самообновление: OBS (особенно док-панели) держит страницу в кэше до 10 минут, и тогда работает
+         старая версия. Спрашиваем у сервера номер последней версии в обход кэша и, если отстали,
+         перезагружаемся по новому адресу — его в кэше нет. Номер ниже поднимается вместе с ?v= файлов. -->
+    <script>
+      (function () {
+        var CURRENT = 19;
+        window.__appVersion = CURRENT;
+        fetch('version.json', { cache: 'no-store' })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (!(j.v > CURRENT) || sessionStorage.getItem('trg.updatedTo') === String(j.v)) return;
+            sessionStorage.setItem('trg.updatedTo', String(j.v));
+            var u = new URL(location.href);
+            u.searchParams.set('v', j.v);
+            location.replace(u.href);
+          })
+          .catch(function () {});
+      })();
+    </script>
   </head>
   <body>
     <header class="topbar">
       <div class="brand">
         <span class="brand-mark"></span>
         <span>Roulette Giveaway</span>
+        <span id="appVersion" class="app-version"></span>
       </div>
       <div class="topbar-right">
         <span id="chatStatus" class="pill" hidden></span>
@@ -217,6 +237,6 @@
         }, 8000);
       })();
     </script>
-    <script type="module" src="js/panel.js?v=18"></script>
+    <script type="module" src="js/panel.js?v=19"></script>
   </body>
 </html>

@@ -19,7 +19,7 @@ npm install gltfpack@0.22.0 esbuild@0.24.0
 esbuild tools/three-entry.js --bundle --format=esm --minify --target=chrome95 --legal-comments=none --outfile=js/vendor/three.bundle.js
 ```
 
-После пересборки поднимите номер версии `?v=` во всех файлах (иначе OBS возьмёт старую сборку из кеша).
+После пересборки поднимите номер версии во всех файлах: `?v=N` в ссылках, `var CURRENT = N` в `index.html` и `overlay.html` и `version.json`. Страницы сравнивают свой номер с `version.json` и, если отстали, сами перезагружаются — так OBS не застревает на старой версии из кеша.
 
 ## Модели
 

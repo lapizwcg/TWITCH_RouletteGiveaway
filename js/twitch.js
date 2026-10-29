@@ -1,4 +1,4 @@
-import { CLIENT_ID, SCOPES } from './config.js?v=18';
+import { CLIENT_ID, SCOPES } from './config.js?v=19';
 
 const TOKEN_KEY = 'trg.token';
 const STATE_KEY = 'trg.oauthState';

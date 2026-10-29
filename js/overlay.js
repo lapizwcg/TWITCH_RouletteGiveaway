@@ -1,7 +1,8 @@
-import { Wheel } from './wheel.js?v=18';
-import { createBus } from './bus.js?v=18';
-import { Crowd } from './crowd.js?v=18';
-import { MATERIALS } from './materials.js?v=18';
+import { Wheel } from './wheel.js?v=19';
+import { createBus } from './bus.js?v=19';
+import { mark } from './perfhud.js?v=19';
+import { Crowd } from './crowd.js?v=19';
+import { MATERIALS } from './materials.js?v=19';
 
 const $ = (id) => document.getElementById(id);
 // В OBS у страницы есть window.obsstudio; вне OBS фон тёмный, чтобы было что видно.
@@ -44,6 +45,7 @@ const bus = createBus((msg) => {
     connected = true;
     renderHint();
   }
+  mark(`оверлей: сообщение ${msg.type}`);
   if (msg.type === 'spin') onSpin(msg);
   else if (msg.type === 'state') {
     if (spinning) pending = msg;

@@ -1,9 +1,10 @@
-import * as tw from './twitch.js?v=18';
-import { SCOPES } from './config.js?v=18';
-import { Wheel } from './wheel.js?v=18';
-import { createBus } from './bus.js?v=18';
-import * as G from './giveaway.js?v=18';
-import { MATERIALS } from './materials.js?v=18';
+import * as tw from './twitch.js?v=19';
+import { SCOPES } from './config.js?v=19';
+import { Wheel } from './wheel.js?v=19';
+import { createBus } from './bus.js?v=19';
+import * as G from './giveaway.js?v=19';
+import { MATERIALS } from './materials.js?v=19';
+import { mark } from './perfhud.js?v=19';
 
 const $ = (id) => document.getElementById(id);
 const SETTINGS_KEY = 'trg.settings';
@@ -375,6 +376,7 @@ function announceWin(prizeIndex, id) {
 }
 
 function afterSpin() {
+  mark('пульт: результат');
   if (!G.planNextStep(g, settings)) {
     g.phase = 'finished';
     autoRunning = false;
@@ -398,6 +400,7 @@ function nextEntries() {
 }
 
 function onSpinClick() {
+  mark('пульт: нажата КРУТИТЬ');
   autoRunning = settings.autoSpin;
   spin();
 }
@@ -732,4 +735,5 @@ if (firstRun) {
   saveSettings();
   openSettings('entry');
 }
+$('appVersion').textContent = window.__appVersion ? `v${window.__appVersion}` : '';
 window.__panelStarted = true; // встроенный скрипт в index.html проверяет, что пульт запустился

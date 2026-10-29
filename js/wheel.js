@@ -5,9 +5,10 @@
 // Угол a в мире — точка (cos a, ?, sin a). Ячейка i головы занимает углы [rotation + i*step, rotation + (i+1)*step].
 // Угол -π/2 — дальняя от зрителя сторона колеса (верх кадра).
 
-import * as THREE from './vendor/three.bundle.js?v=18';
-import { RoomEnvironment } from './vendor/three.bundle.js?v=18';
-import { drawHead } from './headart.js?v=18';
+import * as THREE from './vendor/three.bundle.js?v=19';
+import { RoomEnvironment } from './vendor/three.bundle.js?v=19';
+import { drawHead } from './headart.js?v=19';
+import { mark } from './perfhud.js?v=19';
 
 const TAU = Math.PI * 2;
 const MAX_FRETS = 256;
@@ -103,6 +104,7 @@ export class Wheel {
     // перерисовка — это заливка текстур в видеокарту, а на старте прокрута это заметный рывок.
     const key = entriesKey(entries);
     if (key === this.entriesKey) {
+      mark('колесо: тот же список');
       this.setHighlight(null);
       return;
     }
@@ -116,6 +118,7 @@ export class Wheel {
       // Выбыл один: его сектор плавно схлопывается, соседи занимают место; новая картинка
       // (обычно уже заготовлена) подменит старую в конце, когда они совпадут.
       this.hl.uHlIndex.value = -1;
+      mark(`колесо: сжатие сектора, заготовка ${back.key === key ? 'есть' : 'НЕТ'}`);
       this.collapse = { t0: performance.now(), oldCount: prev.length, removed, key };
       this.hl.uWarpOn.value = 1;
       this.hl.uOldCount.value = prev.length;
@@ -126,9 +129,11 @@ export class Wheel {
       return;
     }
     if (back.key === key) {
+      mark('колесо: новый список, заготовка есть');
       this.swap(); // заготовка уже в видеокарте — только переключаем текстуры
       return;
     }
+    mark('колесо: новый список, рисуем');
     this.paint(entries, true);
   }
 
@@ -367,7 +372,7 @@ export class Wheel {
     this.jobs = new Map();
     this.jobId = 0;
     try {
-      this.worker = new Worker(new URL('./headart.worker.js?v=18', import.meta.url), { type: 'module' });
+      this.worker = new Worker(new URL('./headart.worker.js?v=19', import.meta.url), { type: 'module' });
       this.worker.onmessage = (e) => this.onPainted(e.data);
       this.worker.onerror = () => (this.worker = null); // нет OffscreenCanvas — рисуем в основном потоке
     } catch {
@@ -629,6 +634,7 @@ export class Wheel {
 
   /** Кладёт готовые картинки в запасной комплект и заливает их в видеокарту. */
   fill(job, color, orm, flipY) {
+    mark('колесо: картинка готова, заливка');
     const back = this.buffers[1 - this.front];
     for (const [tex, image] of [
       [back.tex, color],
@@ -648,6 +654,7 @@ export class Wheel {
 
   /** Переключение на запасной комплект: только смена ссылок на текстуры, без рисования и заливки. */
   swap() {
+    mark('колесо: переключение текстур');
     this.collapse = null;
     this.hl.uWarpOn.value = 0;
     this.front = 1 - this.front;
@@ -672,6 +679,7 @@ export class Wheel {
     const key = entriesKey(entries);
     const back = this.buffers[1 - this.front];
     if (key === this.entriesKey || key === back.key || !entries.length) return;
+    mark('колесо: заготовка следующего списка');
     this.paint(entries, false);
   }
 
