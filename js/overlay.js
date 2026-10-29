@@ -1,9 +1,7 @@
-import { Wheel } from './wheel.js?v=6';
-import { createBus } from './bus.js?v=6';
-
-// Параметры адреса: ?winners=1 — показывать список победителей в углу (по умолчанию выключен).
-const params = new URLSearchParams(location.search);
-const showWinners = params.get('winners') === '1';
+import { Wheel } from './wheel.js?v=7';
+import { createBus } from './bus.js?v=7';
+import { Crowd } from './crowd.js?v=7';
+import { MATERIALS } from './materials.js?v=7';
 
 const $ = (id) => document.getElementById(id);
 // В OBS у страницы есть window.obsstudio; вне OBS фон тёмный, чтобы было что видно.
@@ -29,6 +27,8 @@ const setIdle = (value) => {
 };
 renderHint();
 const wheel = new Wheel($('wheel'));
+const crowd = new Crowd($('crowd'), $('crowdLabels'));
+let roster = [];
 let spinning = false;
 let pending = null; // состояние, пришедшее во время прокрута
 let shownEntries = '';
@@ -63,12 +63,36 @@ function applyState(s) {
   wheel.setHighlight(s.highlight);
   showResult(s.result);
 
-  const list = s.winners || [];
-  $('winnersBox').hidden = !showWinners || !list.length;
-  $('winners').innerHTML = list
-    .map((w) => `<li><span class="prize">${escapeHtml(w.prize)}</span> <span class="name">${escapeHtml(w.name)}</span></li>`)
-    .join('');
+  roster = s.roster || [];
+  crowd.setPeople(roster);
+  renderRoster();
 }
+
+// Список справа: победители по местам, затем кто ещё в игре, затем выбывшие (последний выбывший выше).
+// Строк ровно столько, сколько помещается; остальное — «и ещё N».
+function renderRoster() {
+  const wins = roster.filter((p) => p.status === 'win').sort((a, b) => a.place - b.place);
+  const inGame = roster.filter((p) => p.status === 'in');
+  const out = roster.filter((p) => p.status === 'out').sort((a, b) => b.order - a.order);
+  const all = [...wins, ...inGame, ...out];
+  $('rosterCount').textContent = roster.length ? `${inGame.length + wins.length} / ${roster.length}` : '';
+
+  const list = $('roster');
+  const u = Math.min(innerHeight / 100, innerWidth * 0.005625); // то же, что --u в CSS
+  const probe = list.firstElementChild?.getBoundingClientRect().height || u * 3.4;
+  const fit = Math.max(1, Math.floor(list.clientHeight / probe));
+  const shown = all.length > fit ? all.slice(0, fit - 1) : all;
+  list.innerHTML = shown
+    .map((p) => {
+      const color = MATERIALS[p.mat % MATERIALS.length].color;
+      const place = p.status === 'win' ? `<span class="place">${p.place} место</span>` : '';
+      return `<li class="${p.status}"><span class="chip" style="background:${color}"></span><span class="nm">${escapeHtml(p.name)}</span>${place}</li>`;
+    })
+    .join('');
+  $('rosterMore').textContent = all.length > shown.length ? `и ещё ${all.length - shown.length}` : '';
+}
+
+new ResizeObserver(() => renderRoster()).observe($('roster'));
 
 async function onSpin(msg) {
   setIdle(false);

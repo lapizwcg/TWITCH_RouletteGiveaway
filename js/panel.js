@@ -1,9 +1,9 @@
-import * as tw from './twitch.js?v=6';
-import { SCOPES } from './config.js?v=6';
-import { Wheel } from './wheel.js?v=6';
-import { createBus } from './bus.js?v=6';
-import * as G from './giveaway.js?v=6';
-import { MATERIALS } from './materials.js?v=6';
+import * as tw from './twitch.js?v=7';
+import { SCOPES } from './config.js?v=7';
+import { Wheel } from './wheel.js?v=7';
+import { createBus } from './bus.js?v=7';
+import * as G from './giveaway.js?v=7';
+import { MATERIALS } from './materials.js?v=7';
 
 const $ = (id) => document.getElementById(id);
 const SETTINGS_KEY = 'trg.settings';
@@ -617,8 +617,25 @@ function broadcastState(force = false) {
       highlight: display.highlight,
       result: display.result,
       winners: winnersView(),
+      roster: rosterView(),
     });
   }, wait);
+}
+
+/** Весь допущенный состав для оверлея: кто в игре, кто выбыл (и в каком порядке), кто какое место занял. */
+function rosterView() {
+  const out = new Map(g.eliminated.map((id, i) => [id, i]));
+  const won = new Map(g.winners.map((w) => [w.id, w.prizeIndex + 1]));
+  return g.participants
+    .filter((p) => p.status === 'ok')
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      mat: p.mat ?? 0,
+      status: won.has(p.id) ? 'win' : out.has(p.id) ? 'out' : 'in',
+      place: won.get(p.id),
+      order: out.get(p.id),
+    }));
 }
 
 function copyOverlayUrl() {

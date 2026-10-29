@@ -4,13 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Roulette Giveaway — оверлей</title>
-    <link rel="stylesheet" href="css/overlay.css?v=6" />
+    <link rel="stylesheet" href="css/overlay.css?v=7" />
   </head>
   <body>
     <!-- Подсказка видна сразу, без скриптов: если скрипты не загрузятся, она хотя бы скажет об этом. -->
     <div id="hint" class="hint">
       <h1>Оверлей рулетки</h1>
-      <p>Этот адрес нужен для OBS: <b>Источники → + → Браузер</b>, 1920×1080. Фон там прозрачный, колесо появится поверх стрима.</p>
+      <p>Этот адрес нужен для OBS: <b>Источники → + → Браузер</b>, 1920×1080. Пока розыгрыша нет, источник прозрачный; во время розыгрыша на нём игровой стол с рулеткой.</p>
       <p>Колесо показывается, когда в пульте открыта регистрация или идёт розыгрыш. Пульт должен быть открыт в этом же браузере: в OBS — как док-панель, здесь — в соседней вкладке.</p>
       <p id="hintStatus" class="muted">Загрузка…</p>
     </div>
@@ -25,23 +25,26 @@
           'Скрипты оверлея не загрузились. Обновите OBS до версии 28 или новее, в свойствах источника нажмите «Обновить кэш текущей страницы».';
       }, 6000);
     </script>
-    <!-- Три ряда фиксированной высоты: подсказка сверху, колесо, результат снизу. Ничего не выходит за рамку источника. -->
+    <!-- Игровой стол: слева толпа участников, по центру рулетка, справа список. Ничего не выходит за рамку источника. -->
     <div id="root" class="root hidden">
-      <div class="slot"><div id="header" class="header"></div></div>
-      <div class="wheel-box">
-        <canvas id="wheel"></canvas>
-        <aside id="winnersBox" class="winners-box" hidden>
-          <h2>Победители</h2>
-          <ol id="winners"></ol>
-        </aside>
+      <div class="slot head-slot"><div id="header" class="header"></div></div>
+      <div class="crowd-box">
+        <canvas id="crowd"></canvas>
+        <div id="crowdLabels" class="crowd-labels"></div>
       </div>
-      <div class="slot">
+      <div class="wheel-box"><canvas id="wheel"></canvas></div>
+      <aside class="roster-box">
+        <h2>Участники <span id="rosterCount" class="roster-count"></span></h2>
+        <ol id="roster" class="roster"></ol>
+        <div id="rosterMore" class="roster-more"></div>
+      </aside>
+      <div class="slot result-slot">
         <div id="result" class="result">
           <div id="resultMain" class="result-main"></div>
           <div id="resultSub" class="result-sub"></div>
         </div>
       </div>
     </div>
-    <script type="module" src="js/overlay.js?v=6"></script>
+    <script type="module" src="js/overlay.js?v=7"></script>
   </body>
 </html>
