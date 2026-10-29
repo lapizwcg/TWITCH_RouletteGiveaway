@@ -12,7 +12,7 @@ import * as THREE from './vendor/three.module.js';
 import { RoomEnvironment } from './vendor/RoomEnvironment.js';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
 import * as SkeletonUtils from './vendor/SkeletonUtils.js';
-import { MATERIALS } from './materials.js?v=11';
+import { MATERIALS } from './materials.js?v=12';
 
 // Текстура каждого персонажа KayKit — сетка 8×4 вертикальных градиентов («ячеек», по 128×256 пикселей):
 // каждая ячейка — отдельный материал модели (кожа, сталь, ткань, ремни), а тени зашиты в градиент.
@@ -37,11 +37,12 @@ const CELL_ROWS = 4;
 const modelUrl = (c) => new URL(`../assets/models/characters/${c.name}.glb`, import.meta.url).href;
 const ANIMS_URL = new URL('../assets/models/kaykit_anims.glb', import.meta.url).href;
 const MAX_CELLS = 24;
-// Ячейка с запасом: модель (рост ≈ 1.75, с поднятыми руками ≈ 2.0, шире всех — рогатый шлем),
-// под ней ник и зазор до соседей — чтобы ни модели, ни подписи не налезали друг на друга.
+// Ячейка с запасом: модель (с головным убором до 2.66 — шляпа мага, шлем рыцаря ≈ 2.5; шире
+// всех — рогатый шлем), под ней ник и зазор до соседей — чтобы ни модели, ни подписи не налезали.
+// Полка: 2.66 (рост) + ~0.2 (наклон камеры) + ~0.55 (ник ряда выше) + ~0.3 зазор ≈ 3.8.
 const CELL_W = 2.3;
-const ROW_H = 3.0;
-const HEIGHT = 2.0; // с запасом на поднятые руки
+const ROW_H = 3.8;
+const HEIGHT = 2.7; // верх самой высокой модели с головным убором
 // Сетка растёт ступенями: сначала на 4 места, затем 6, 8, 10… Масштаб меняется только на ступени,
 // а не с каждым новым участником.
 const BASE_CAPACITY = 4;
