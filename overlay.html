@@ -4,13 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Roulette Giveaway — оверлей</title>
-    <link rel="stylesheet" href="css/overlay.css?v=20" />
+    <link rel="stylesheet" href="css/overlay.css?v=21" />
     <!-- Самообновление: OBS (особенно док-панели) держит страницу в кэше до 10 минут, и тогда работает
          старая версия. Спрашиваем у сервера номер последней версии в обход кэша и, если отстали,
          перезагружаемся по новому адресу — его в кэше нет. Номер ниже поднимается вместе с ?v= файлов. -->
     <script>
       (function () {
-        var CURRENT = 20;
+        var CURRENT = 21;
         window.__appVersion = CURRENT;
         fetch('version.json', { cache: 'no-store' })
           .then(function (r) { return r.json(); })
@@ -40,9 +40,20 @@
       }, true);
       setTimeout(function () {
         if (window.__overlayStarted) return;
-        document.getElementById('hintStatus').textContent =
-          'Скрипты оверлея не загрузились. Обновите OBS до версии 28 или новее, в свойствах источника нажмите «Обновить кэш текущей страницы».';
-      }, 6000);
+        document.getElementById('hintStatus').textContent = 'Скрипты оверлея не запустились: ' + diagnose();
+      }, 10000);
+        // Почему не запустилось: старый браузер внутри OBS или недогруженные файлы (обрыв сети).
+        function diagnose() {
+          var m = navigator.userAgent.match(/Chrome\/(\d+)/);
+          var chrome = m ? +m[1] : 0;
+          var files = ['js/overlay.js', 'js/bus.js', 'js/materials.js', 'js/perfhud.js', 'js/wheel.js', 'js/headart.js', 'js/crowd.js', 'js/vendor/three.bundle.js'];
+          var got = performance.getEntriesByType('resource').map(function (e) { return e.name; });
+          var missing = files.filter(function (f) { return !got.some(function (n) { return n.indexOf(f) >= 0; }); });
+          if (chrome && chrome < 95) return 'браузер внутри OBS слишком старый (Chrome ' + chrome + ') — обновите OBS до версии 30 или новее';
+          if (missing.length)
+            return 'не догрузились файлы: ' + missing.join(', ') + ' — сеть или провайдер обрывает загрузку с github.io (попробуйте другую сеть или VPN) [Chrome ' + chrome + ']';
+          return 'файлы загрузились, но не запустились [Chrome ' + chrome + ']';
+        }
     </script>
     <!-- Игровой стол: слева толпа участников, по центру рулетка, справа список. Ничего не выходит за рамку источника. -->
     <div id="root" class="root hidden">
@@ -64,6 +75,6 @@
         </div>
       </div>
     </div>
-    <script type="module" src="js/overlay.js?v=20"></script>
+    <script type="module" src="js/overlay.js?v=21"></script>
   </body>
 </html>
