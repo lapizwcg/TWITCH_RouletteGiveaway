@@ -1,7 +1,7 @@
-import { Wheel } from './wheel.js?v=14';
-import { createBus } from './bus.js?v=14';
-import { Crowd } from './crowd.js?v=14';
-import { MATERIALS } from './materials.js?v=14';
+import { Wheel } from './wheel.js?v=15';
+import { createBus } from './bus.js?v=15';
+import { Crowd } from './crowd.js?v=15';
+import { MATERIALS } from './materials.js?v=15';
 
 const $ = (id) => document.getElementById(id);
 // В OBS у страницы есть window.obsstudio; вне OBS фон тёмный, чтобы было что видно.
@@ -67,6 +67,8 @@ function applyState(s) {
     wheel.setEntries(s.entries);
   }
   wheel.setHighlight(s.highlight);
+  // Заготовка следующего списка — чтобы прокрут стартовал без рывка.
+  if (s.next) setTimeout(() => !spinning && wheel.prepare(s.next), 400);
   showResult(s.result);
 
   roster = s.roster || [];

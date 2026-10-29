@@ -1,9 +1,9 @@
-import * as tw from './twitch.js?v=14';
-import { SCOPES } from './config.js?v=14';
-import { Wheel } from './wheel.js?v=14';
-import { createBus } from './bus.js?v=14';
-import * as G from './giveaway.js?v=14';
-import { MATERIALS } from './materials.js?v=14';
+import * as tw from './twitch.js?v=15';
+import { SCOPES } from './config.js?v=15';
+import { Wheel } from './wheel.js?v=15';
+import { createBus } from './bus.js?v=15';
+import * as G from './giveaway.js?v=15';
+import { MATERIALS } from './materials.js?v=15';
 
 const $ = (id) => document.getElementById(id);
 const SETTINGS_KEY = 'trg.settings';
@@ -382,7 +382,19 @@ function afterSpin() {
   saveGiveaway();
   render();
   broadcastState(true);
+  // Пока колесо стоит с результатом, заготавливаем следующий список (без выбывшего) —
+  // тогда «КРУТИТЬ» стартует без рывка.
+  setTimeout(() => {
+    const next = nextEntries();
+    if (next && !spinning) wheel.prepare(next);
+  }, 400);
   if (autoRunning) autoTimer = setTimeout(spin, Math.max(300, settings.autoDelaySeconds * 1000));
+}
+
+/** Список ячеек следующего прокрута (или null, если крутить больше нечего). */
+function nextEntries() {
+  const step = g.phase === 'closed' ? G.planNextStep(g, settings) : null;
+  return step && !step.auto ? entriesOf(step.pool) : null;
 }
 
 function onSpinClick() {
@@ -618,6 +630,7 @@ function broadcastState(force = false) {
       result: display.result,
       winners: winnersView(),
       roster: rosterView(),
+      next: nextEntries(), // оверлей заранее готовит колесо к следующему прокруту
     });
   }, wait);
 }

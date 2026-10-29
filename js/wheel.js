@@ -5,11 +5,12 @@
 // Угол a в мире — точка (cos a, ?, sin a). Ячейка i головы занимает углы [rotation + i*step, rotation + (i+1)*step].
 // Угол -π/2 — дальняя от зрителя сторона колеса (верх кадра).
 
-import * as THREE from './vendor/three.bundle.js?v=14';
-import { RoomEnvironment } from './vendor/three.bundle.js?v=14';
-import { MATERIALS } from './materials.js?v=14';
+import * as THREE from './vendor/three.bundle.js?v=15';
+import { RoomEnvironment } from './vendor/three.bundle.js?v=15';
+import { MATERIALS } from './materials.js?v=15';
 
 const TAU = Math.PI * 2;
+const MAX_FRETS = 256;
 const IDLE_FRAME_MS = 1000 / 30; // в покое (медленный дрейф, пульсация подсветки) хватает 30 кадров; прокрут — каждый кадр
 const DRIFT = 0.12; // рад/с — в покое колесо медленно вращается, как настоящее
 const R = {
@@ -63,6 +64,8 @@ export class Wheel {
     this.buildHead();
     this.buildBall();
     this.paintHead();
+    // Шейдеры компилируем сразу при загрузке, а не в момент первого прокрута.
+    renderer.compile(this.scene, this.camera);
 
     new ResizeObserver(() => this.resize()).observe(canvas);
     this.resize();
@@ -94,8 +97,27 @@ export class Wheel {
     this.ball = keepBall
       ? { mode: 'free', angle, r: this.ball.r, y: this.ball.y }
       : { mode: 'track', angle, r: TRACK_R, y: trackY(TRACK_R) + BALL };
+    // Тот же список (обычное «КРУТИТЬ» без выбывания) — голову не перерисовываем: каждая
+    // перерисовка — это заливка текстур в видеокарту, а на старте прокрута это заметный рывок.
+    const key = entriesKey(entries);
+    if (key === this.entriesKey) {
+      this.setHighlight(null);
+      return;
+    }
+    this.entriesKey = key;
     this.entries = entries;
     this.highlight = null;
+    const back = this.buffers[1 - this.front];
+    if (back.key === key) {
+      // Заготовка уже в видеокарте — только переключаем текстуры.
+      this.front = 1 - this.front;
+      this.headMaterial.map = back.tex;
+      this.headMaterial.roughnessMap = back.orm;
+      this.headMaterial.metalnessMap = back.orm;
+      this.buildFrets(entries.length);
+      this.paintHighlight();
+      return;
+    }
     this.paintHead();
   }
 
@@ -149,8 +171,7 @@ export class Wheel {
       this.ball = { mode: 'free', angle: this.rotation + rel, r, y: surfaceY(r) + BALL + hop };
     };
 
-    this.highlight = null;
-    this.paintHighlight();
+    this.setHighlight(null);
     // Конец прокрута отсчитывает таймер: в свёрнутом окне или фоновой вкладке
     // requestAnimationFrame не вызывается, а розыгрыш всё равно должен идти дальше.
     return new Promise((resolve) => {
@@ -317,24 +338,31 @@ export class Wheel {
     this.head = new THREE.Group();
     this.scene.add(this.head);
 
-    this.headCanvas = document.createElement('canvas');
-    this.headCanvas.width = this.headCanvas.height = 2048;
-    this.headTexture = canvasTexture(this.headCanvas, this.maxAniso);
+    // Два комплекта текстур головы (ники + свойства материалов): пока колесо стоит с результатом,
+    // следующий список рисуется и заливается в видеокарту в запасной комплект, а на «КРУТИТЬ»
+    // колесо просто переключается на него — без рывка от заливки 2048×2048.
+    const makeBuffer = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 2048;
+      const ormCanvas = document.createElement('canvas');
+      ormCanvas.width = ormCanvas.height = 512; // свойства материалов по секторам — без мелких деталей
+      const tex = canvasTexture(canvas, this.maxAniso);
+      const orm = canvasTexture(ormCanvas, this.maxAniso);
+      orm.colorSpace = THREE.NoColorSpace;
+      return { canvas, ormCanvas, tex, orm, key: null };
+    };
+    this.buffers = [makeBuffer(), makeBuffer()];
+    this.front = 0;
     this.glowCanvas = document.createElement('canvas');
-    this.glowCanvas.width = this.glowCanvas.height = 1024;
+    this.glowCanvas.width = this.glowCanvas.height = 256; // подсветка — просто сектор, большой холст не нужен
     this.glowTexture = canvasTexture(this.glowCanvas, this.maxAniso);
-    // Карта свойств материала по секторам: G — шероховатость, B — металл.
-    this.ormCanvas = document.createElement('canvas');
-    this.ormCanvas.width = this.ormCanvas.height = 1024;
-    this.ormTexture = canvasTexture(this.ormCanvas, this.maxAniso);
-    this.ormTexture.colorSpace = THREE.NoColorSpace;
 
     this.headMaterial = new THREE.MeshStandardMaterial({
-      map: this.headTexture,
+      map: this.buffers[0].tex,
       roughness: 1,
       metalness: 1,
-      roughnessMap: this.ormTexture,
-      metalnessMap: this.ormTexture,
+      roughnessMap: this.buffers[0].orm,
+      metalnessMap: this.buffers[0].orm,
       emissive: 0xffffff,
       emissiveMap: this.glowTexture,
       emissiveIntensity: 0,
@@ -489,13 +517,13 @@ export class Wheel {
     return env;
   }
 
-  /** Перерисовывает текстуру головы и перегородки под текущий список участников. */
-  paintHead() {
-    const real = this.entries.length;
+  /** Рисует ники и свойства материалов для списка entries в комплект текстур buf. */
+  paintInto(buf, entries) {
+    const real = entries.length;
     const n = real || 24;
     const step = TAU / n;
-    const ctx = this.headCanvas.getContext('2d');
-    const size = this.headCanvas.width;
+    const ctx = buf.canvas.getContext('2d');
+    const size = buf.canvas.width;
     const k = size / 2 / R.texture; // пикселей на единицу радиуса
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#3a1a08';
@@ -503,18 +531,18 @@ export class Wheel {
     ctx.translate(size / 2, size / 2);
     ctx.scale(k, k);
 
-    const orm = this.ormCanvas.getContext('2d');
-    const ko = this.ormCanvas.width / 2 / R.texture;
+    const orm = buf.ormCanvas.getContext('2d');
+    const ko = buf.ormCanvas.width / 2 / R.texture;
     orm.setTransform(1, 0, 0, 1, 0, 0);
     orm.fillStyle = WOOD_ORM;
-    orm.fillRect(0, 0, this.ormCanvas.width, this.ormCanvas.height);
-    orm.translate(this.ormCanvas.width / 2, this.ormCanvas.height / 2);
+    orm.fillRect(0, 0, buf.ormCanvas.width, buf.ormCanvas.height);
+    orm.translate(buf.ormCanvas.width / 2, buf.ormCanvas.height / 2);
     orm.scale(ko, ko);
 
     // Сектор участника — конус с ником, ячейка и поясок — целиком из его материала.
     const mats = [];
     for (let i = 0; i < n; i++) {
-      const m = MATERIALS[(real ? this.entries[i].mat : i) % MATERIALS.length];
+      const m = MATERIALS[(real ? entries[i].mat : i) % MATERIALS.length];
       mats.push(m);
       sector(ctx, R.hub, R.headOuter + 0.02, i * step, (i + 1) * step);
       ctx.fillStyle = m.color;
@@ -612,7 +640,7 @@ export class Wheel {
           return Math.max(s, fs * 0.4);
         };
         for (let i = 0; i < n; i++) {
-          const name = this.entries[i].name;
+          const name = entries[i].name;
           // Длинный ник: либо уменьшаем, либо переносим на две строки — что получится крупнее.
           let lines = [name];
           let size = fitSize(lines);
@@ -650,26 +678,51 @@ export class Wheel {
     ctx.fillStyle = hub;
     ctx.fill();
 
-    this.headTexture.needsUpdate = true;
-    this.ormTexture.needsUpdate = true;
-    this.buildFrets(n);
+    buf.tex.needsUpdate = true;
+    buf.orm.needsUpdate = true;
+    buf.key = entriesKey(entries);
+  }
+
+  /** Перерисовывает голову под текущий список — сразу, без заготовки. */
+  paintHead() {
+    const buf = this.buffers[this.front];
+    this.paintInto(buf, this.entries);
+    this.buildFrets(this.entries.length || 24);
     this.paintHighlight();
   }
 
-  /** Золотые перегородки между ячейками — настоящие, объёмные. */
+  /**
+   * Заготовка следующего списка (после выбывания): рисуем в запасной комплект и сразу заливаем в
+   * видеокарту, пока колесо стоит с результатом. Следующий setEntries с этим списком — мгновенный.
+   */
+  prepare(entries) {
+    const key = entriesKey(entries);
+    const back = this.buffers[1 - this.front];
+    if (key === this.entriesKey || key === back.key || !entries.length) return;
+    this.paintInto(back, entries);
+    this.renderer.initTexture(back.tex);
+    this.renderer.initTexture(back.orm);
+  }
+
+  /**
+   * Золотые перегородки между ячейками — настоящие, объёмные. Сетка создаётся один раз на MAX_FRETS
+   * штук, дальше меняются только их число и расстановка: пересоздание выкидывало шейдер из видеокарты
+   * и компилировало его заново — это и был фриз в начале каждого прокрута.
+   */
   buildFrets(n) {
-    if (this.frets) {
-      this.head.remove(this.frets);
-      this.frets.geometry.dispose();
-      this.frets.dispose();
+    if (!this.frets) {
+      const geo = new THREE.BoxGeometry(R.headOuter - R.pocketInner, 0.06, 1); // толщина задаётся масштабом
+      this.frets = new THREE.InstancedMesh(geo, this.gold, MAX_FRETS);
+      this.frets.castShadow = true;
+      this.frets.receiveShadow = true;
+      this.head.add(this.frets);
     }
+    n = Math.min(n, MAX_FRETS);
     const thickness = n > 150 ? 0.003 : n > 60 ? 0.006 : 0.011;
-    const geo = new THREE.BoxGeometry(R.headOuter - R.pocketInner, 0.06, thickness);
-    this.frets = new THREE.InstancedMesh(geo, this.gold, n);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const up = new THREE.Vector3(0, 1, 0);
-    const scale = new THREE.Vector3(1, 1, 1);
+    const scale = new THREE.Vector3(1, 1, thickness);
     const mid = (R.pocketInner + R.headOuter) / 2;
     for (let i = 0; i < n; i++) {
       const a = (i * TAU) / n;
@@ -677,9 +730,8 @@ export class Wheel {
       m.compose(new THREE.Vector3(Math.cos(a) * mid, 0.03, Math.sin(a) * mid), q, scale);
       this.frets.setMatrixAt(i, m);
     }
-    this.frets.castShadow = true;
-    this.frets.receiveShadow = true;
-    this.head.add(this.frets);
+    this.frets.count = n;
+    this.frets.instanceMatrix.needsUpdate = true;
   }
 
   paintHighlight() {
@@ -832,6 +884,10 @@ export function splitName(name) {
   if (best > 0 && Math.abs(best - mid) <= name.length * 0.3) return [name.slice(0, best), name.slice(best + drop)];
   const cut = Math.ceil(mid);
   return [name.slice(0, cut), name.slice(cut)];
+}
+
+function entriesKey(entries) {
+  return entries.map((e) => `${e.mat}:${e.name}`).join('|');
 }
 
 function luminance(hex) {
