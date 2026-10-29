@@ -12,7 +12,7 @@ import * as THREE from './vendor/three.module.js';
 import { RoomEnvironment } from './vendor/RoomEnvironment.js';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
 import * as SkeletonUtils from './vendor/SkeletonUtils.js';
-import { MATERIALS } from './materials.js?v=10';
+import { MATERIALS } from './materials.js?v=11';
 
 // Текстура каждого персонажа KayKit — сетка 8×4 вертикальных градиентов («ячеек», по 128×256 пикселей):
 // каждая ячейка — отдельный материал модели (кожа, сталь, ткань, ремни), а тени зашиты в градиент.
@@ -37,9 +37,15 @@ const CELL_ROWS = 4;
 const modelUrl = (c) => new URL(`../assets/models/characters/${c.name}.glb`, import.meta.url).href;
 const ANIMS_URL = new URL('../assets/models/kaykit_anims.glb', import.meta.url).href;
 const MAX_CELLS = 24;
-const CELL_W = 1.7;
-const ROW_H = 2.45; // высота полки: рост, поднятые руки и подпись
+// Ячейка с запасом: модель (рост ≈ 1.75, с поднятыми руками ≈ 2.0, шире всех — рогатый шлем),
+// под ней ник и зазор до соседей — чтобы ни модели, ни подписи не налезали друг на друга.
+const CELL_W = 2.3;
+const ROW_H = 3.0;
 const HEIGHT = 2.0; // с запасом на поднятые руки
+// Сетка растёт ступенями: сначала на 4 места, затем 6, 8, 10… Масштаб меняется только на ступени,
+// а не с каждым новым участником.
+const BASE_CAPACITY = 4;
+const CAPACITY_STEP = 2;
 const FADE_AFTER = 1.6; // секунд лежит выбывший, прежде чем исчезнуть
 const FADE_TIME = 0.6;
 
@@ -119,7 +125,8 @@ export class Crowd {
   }
 
   layoutGrid() {
-    const n = Math.max(1, this.cells.length);
+    const n = Math.max(BASE_CAPACITY, Math.ceil(this.cells.length / CAPACITY_STEP) * CAPACITY_STEP);
+    this.capacity = n;
     const aspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
     // Сколько колонок, чтобы ячейки были крупнее всего при данной форме области.
     let best = 1;
@@ -399,19 +406,21 @@ export class Crowd {
       const p = new THREE.Vector3(x, y, z).applyMatrix4(inv);
       [x0, x1, y0, y1] = [Math.min(x0, p.x), Math.max(x1, p.x), Math.min(y0, p.y), Math.max(y1, p.y)];
     }
-    y0 -= 0.45; // место под подписи у нижнего ряда
+    y0 -= 0.8; // место под подписи у нижнего ряда
     const aspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
     let halfW = (x1 - x0) / 2;
     let halfH = (y1 - y0) / 2;
-    // Не крупнее, чем если бы в ряду было 3 ячейки: один участник не займёт всю колонку.
-    halfW = Math.max(halfW, (3 * CELL_W) / 2);
-    halfH = Math.max(halfH, (2.2 * ROW_H) / 2);
     if (halfW / halfH > aspect) halfH = halfW / aspect;
     else halfW = halfH * aspect;
     const cx = (x0 + x1) / 2;
     const cy = (y0 + y1) / 2;
     Object.assign(cam, { left: cx - halfW, right: cx + halfW, top: cy + halfH, bottom: cy - halfH });
     cam.updateProjectionMatrix();
+
+    // Подпись не шире своей ячейки, шрифт — от размера ячейки: при ступени вниз уменьшается вместе с сеткой.
+    const cellPx = (CELL_W * this.canvas.clientWidth) / (2 * halfW);
+    this.labelsEl.style.setProperty('--label-max', `${Math.round(cellPx * 0.94)}px`);
+    this.labelsEl.style.setProperty('--label-font', `${Math.round(Math.min(24, Math.max(10, cellPx * 0.12)))}px`);
   }
 }
 

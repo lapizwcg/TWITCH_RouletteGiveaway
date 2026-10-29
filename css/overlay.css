@@ -197,11 +197,13 @@ body.preview {
   position: absolute;
   left: 0;
   top: 0;
-  max-width: 34%;
-  padding: calc(var(--u) * 0.2) calc(var(--u) * 0.8);
-  border-radius: calc(var(--u) * 0.8);
+  /* Ширина и шрифт задаются от размера ячейки сетки (crowd.js): ник не залезает к соседу. */
+  max-width: var(--label-max, 34%);
+  box-sizing: border-box;
+  padding: 0.15em 0.55em;
+  border-radius: 0.5em;
   background: rgba(10, 10, 12, 0.78);
-  font-size: calc(var(--u) * 1.7);
+  font-size: var(--label-font, calc(var(--u) * 1.7));
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
