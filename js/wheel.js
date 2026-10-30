@@ -5,10 +5,10 @@
 // Угол a в мире — точка (cos a, ?, sin a). Ячейка i головы занимает углы [rotation + i*step, rotation + (i+1)*step].
 // Угол -π/2 — дальняя от зрителя сторона колеса (верх кадра).
 
-import * as THREE from './vendor/three.bundle.js?v=21';
-import { RoomEnvironment } from './vendor/three.bundle.js?v=21';
-import { drawHead } from './headart.js?v=21';
-import { mark } from './perfhud.js?v=21';
+import * as THREE from './vendor/three.bundle.js?v=22';
+import { RoomEnvironment } from './vendor/three.bundle.js?v=22';
+import { drawHead } from './headart.js?v=22';
+import { mark } from './perfhud.js?v=22';
 
 const TAU = Math.PI * 2;
 const MAX_FRETS = 256;
@@ -372,7 +372,7 @@ export class Wheel {
     this.jobs = new Map();
     this.jobId = 0;
     try {
-      this.worker = new Worker(new URL('./headart.worker.js?v=21', import.meta.url), { type: 'module' });
+      this.worker = new Worker(new URL('./headart.worker.js?v=22', import.meta.url), { type: 'module' });
       this.worker.onmessage = (e) => this.onPainted(e.data);
       this.worker.onerror = () => (this.worker = null); // нет OffscreenCanvas — рисуем в основном потоке
     } catch {

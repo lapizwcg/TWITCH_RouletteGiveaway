@@ -1,10 +1,10 @@
-import * as tw from './twitch.js?v=21';
-import { SCOPES } from './config.js?v=21';
-import { Wheel } from './wheel.js?v=21';
-import { createBus } from './bus.js?v=21';
-import * as G from './giveaway.js?v=21';
-import { MATERIALS } from './materials.js?v=21';
-import { mark, DEBUG } from './perfhud.js?v=21';
+import * as tw from './twitch.js?v=22';
+import { SCOPES } from './config.js?v=22';
+import { Wheel } from './wheel.js?v=22';
+import { createBus } from './bus.js?v=22';
+import * as G from './giveaway.js?v=22';
+import { MATERIALS } from './materials.js?v=22';
+import { mark, DEBUG } from './perfhud.js?v=22';
 
 const $ = (id) => document.getElementById(id);
 const SETTINGS_KEY = 'trg.settings';
@@ -24,6 +24,7 @@ const FIELDS = [
   'autoSpin',
   'autoDelaySeconds',
   'announce',
+  'rulesCustom',
   'announceStart',
   'announceClose',
   'announceWin',
@@ -473,14 +474,16 @@ function resultView(step, id) {
   return step.kind === 'win' ? { kind: 'win', name, prize: prizeName(step.prizeIndex) } : { kind: 'eliminate', name };
 }
 
-async function announce(template, vars) {
+// Сообщения в чат уходят строго по очереди: иначе два почти одновременных запроса к Twitch
+// (например, «2 место» и сразу выданное «3 место») могли прийти в чат в обратном порядке.
+let chatQueue = Promise.resolve();
+
+function announce(template, vars) {
   if (!settings.announce || !helix || !template.trim()) return;
   const text = G.fillTemplate(template, { keyword: settings.keyword, rules: G.rulesText(settings), count: okCount(), ...vars });
-  try {
-    await helix.sendChat(text);
-  } catch (e) {
-    toast(`Не удалось написать в чат: ${e.message}`);
-  }
+  chatQueue = chatQueue.then(() =>
+    helix.sendChat(text).catch((e) => toast(`Не удалось написать в чат: ${e.message}`)),
+  );
 }
 
 function entriesOf(ids) {
@@ -544,6 +547,9 @@ function renderSettingsState() {
     const [key, value] = el.dataset.show.split('=');
     el.hidden = String(settings[key]) !== value;
   }
+
+  // Пустое поле правил показывает, что подставится автоматически.
+  $('rulesCustom').placeholder = `Пусто — автоматически: «${G.autoRulesText(settings)}»`;
 
   const n = settings.prizeCount;
   $('modeHint').textContent =

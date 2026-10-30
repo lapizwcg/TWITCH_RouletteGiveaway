@@ -9,7 +9,8 @@ export const DEFAULT_SETTINGS = {
   excluded: 'nightbot, streamelements, moobot, streamlabs, fossabot, wizebot',
   prizeCount: 1,
   mode: 'elimination', // 'elimination' | 'simple'
-  finalOrder: 'first', // 'first' — первым разыгрывается приз №1, 'last' — последний приз, главный достаётся оставшемуся
+  finalOrder: 'first', // порядок мест: 'first' — 1 → 2 → 3, 'last' — 3 → 2 → 1 (главный приз разыгрывается последним)
+  rulesCustom: '', // свой текст для {rules}; пусто — собирается из условий автоматически
   allowRepeatWins: false,
   spinSeconds: 6,
   eliminationSpinSeconds: 3,
@@ -30,7 +31,12 @@ export function newGiveaway() {
   };
 }
 
+/** Текст для подстановки {rules}: свой, если задан, иначе собранный из условий. */
 export function rulesText(s) {
+  return s.rulesCustom?.trim() || autoRulesText(s);
+}
+
+export function autoRulesText(s) {
   const parts = [];
   if (s.eligibility === 'followers') {
     parts.push(s.minFollowDays > 0 ? `Нужен фоллоу не меньше ${s.minFollowDays} дн.` : 'Нужен фоллоу.');
@@ -70,7 +76,11 @@ export function planNextStep(g, s) {
   if (s.mode === 'simple') {
     const pool = s.allowRepeatWins ? ok : ok.filter((id) => !won.has(id));
     if (!pool.length) return null;
-    return { kind: 'win', pool, prizeIndex: g.winners.length, auto: pool.length === 1 && !s.allowRepeatWins };
+    // Порядок 3 → 2 → 1: начинаем с последнего места, которое вообще удастся разыграть
+    // (если участников меньше, чем призов, нижние места остаются пустыми, а 1-е — разыгрывается).
+    const places = s.allowRepeatWins ? totalPrizes : Math.min(totalPrizes, ok.length);
+    const prizeIndex = s.finalOrder === 'last' ? places - 1 - g.winners.length : g.winners.length;
+    return { kind: 'win', pool, prizeIndex, auto: pool.length === 1 && !s.allowRepeatWins };
   }
 
   const pool = ok.filter((id) => !won.has(id) && !out.has(id));
