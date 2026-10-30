@@ -4,13 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Roulette Giveaway — оверлей</title>
-    <link rel="stylesheet" href="css/overlay.css?v=22" />
+    <link rel="stylesheet" href="css/overlay.css?v=23" />
     <!-- Самообновление: OBS (особенно док-панели) держит страницу в кэше до 10 минут, и тогда работает
          старая версия. Спрашиваем у сервера номер последней версии в обход кэша и, если отстали,
          перезагружаемся по новому адресу — его в кэше нет. Номер ниже поднимается вместе с ?v= файлов. -->
     <script>
       (function () {
-        var CURRENT = 22;
+        var CURRENT = 23;
         window.__appVersion = CURRENT;
         fetch('version.json', { cache: 'no-store' })
           .then(function (r) { return r.json(); })
@@ -75,6 +75,6 @@
         </div>
       </div>
     </div>
-    <script type="module" src="js/overlay.js?v=22"></script>
+    <script type="module" src="js/overlay.js?v=23"></script>
   </body>
 </html>

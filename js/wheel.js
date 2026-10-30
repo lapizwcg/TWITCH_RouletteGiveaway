@@ -5,10 +5,10 @@
 // Угол a в мире — точка (cos a, ?, sin a). Ячейка i головы занимает углы [rotation + i*step, rotation + (i+1)*step].
 // Угол -π/2 — дальняя от зрителя сторона колеса (верх кадра).
 
-import * as THREE from './vendor/three.bundle.js?v=22';
-import { RoomEnvironment } from './vendor/three.bundle.js?v=22';
-import { drawHead } from './headart.js?v=22';
-import { mark } from './perfhud.js?v=22';
+import * as THREE from './vendor/three.bundle.js?v=23';
+import { RoomEnvironment } from './vendor/three.bundle.js?v=23';
+import { drawHead } from './headart.js?v=23';
+import { mark } from './perfhud.js?v=23';
 
 const TAU = Math.PI * 2;
 const MAX_FRETS = 256;
@@ -335,17 +335,16 @@ export class Wheel {
     this.scene.add(torus(0.94, 0.108, 0.007, this.gold));
     this.scene.add(torus(1.004, 0.106, 0.008, this.gold));
 
-    // Ромбы-отбойники на чаше.
+    // Ромбы-отбойники на чаше: восемь одинаковых, вытянуты к центру и лежат на уклоне чаши.
     const diamond = new THREE.OctahedronGeometry(1, 0);
+    const r = 0.858;
+    const tilt = Math.atan2(trackY(r + 0.01) - trackY(r - 0.01), 0.02);
     for (let k = 0; k < 8; k++) {
       const a = (k * TAU) / 8 + TAU / 16;
-      const radial = k % 2 === 0;
       const m = new THREE.Mesh(diamond, this.gold);
-      const r = 0.858;
       m.position.set(Math.cos(a) * r, trackY(r) + 0.006, Math.sin(a) * r);
-      m.rotation.y = -a;
-      m.rotation.z = 0.6; // ложится на уклон чаши
-      m.scale.set(radial ? 0.04 : 0.014, 0.01, radial ? 0.013 : 0.032);
+      m.rotation.set(0, -a, tilt, 'YZX');
+      m.scale.set(0.036, 0.009, 0.013);
       m.castShadow = true;
       this.scene.add(m);
     }
@@ -372,7 +371,7 @@ export class Wheel {
     this.jobs = new Map();
     this.jobId = 0;
     try {
-      this.worker = new Worker(new URL('./headart.worker.js?v=22', import.meta.url), { type: 'module' });
+      this.worker = new Worker(new URL('./headart.worker.js?v=23', import.meta.url), { type: 'module' });
       this.worker.onmessage = (e) => this.onPainted(e.data);
       this.worker.onerror = () => (this.worker = null); // нет OffscreenCanvas — рисуем в основном потоке
     } catch {
@@ -490,18 +489,19 @@ export class Wheel {
 
   buildTurret() {
     const t = new THREE.Group();
+    // Точки снизу вверх: так грани смотрят наружу, и непрозрачный верх не просвечивает.
     const body = lathe(
       [
-        [0.0, 0.275],
-        [0.016, 0.271],
-        [0.03, 0.258],
-        [0.038, 0.238],
-        [0.03, 0.215],
-        [0.018, 0.195],
-        [0.022, 0.175],
-        [0.045, 0.158],
-        [0.07, 0.14],
         [0.078, 0.121],
+        [0.07, 0.14],
+        [0.045, 0.158],
+        [0.022, 0.175],
+        [0.018, 0.195],
+        [0.03, 0.215],
+        [0.038, 0.238],
+        [0.03, 0.258],
+        [0.016, 0.271],
+        [0.0, 0.275],
       ],
       this.gold,
     );
