@@ -1,8 +1,8 @@
-import { Wheel } from './wheel.js?v=23';
-import { createBus } from './bus.js?v=23';
-import { mark } from './perfhud.js?v=23';
-import { Crowd } from './crowd.js?v=23';
-import { MATERIALS } from './materials.js?v=23';
+import { Wheel } from './wheel.js?v=24';
+import { createBus } from './bus.js?v=24';
+import { mark } from './perfhud.js?v=24';
+import { Crowd } from './crowd.js?v=24';
+import { MATERIALS } from './materials.js?v=24';
 
 const $ = (id) => document.getElementById(id);
 // В OBS у страницы есть window.obsstudio; вне OBS фон тёмный, чтобы было что видно.
@@ -58,10 +58,12 @@ function applyState(s) {
   setIdle(s.phase === 'idle');
 
   // Сверху — только призыв во время регистрации; в остальное время строка пустая, но место за ней сохранено.
-  $('header').innerHTML =
+  setHtml(
+    $('header'),
     s.phase === 'registration'
       ? `Пишите <span class="kw">${escapeHtml(s.keyword)}</span> в чат <span class="count">· участников: ${s.count}</span>`
-      : '';
+      : '',
+  );
 
   const key = entriesKey(s.entries);
   if (key !== shownEntries) {
@@ -85,28 +87,31 @@ function renderRoster() {
   const inGame = roster.filter((p) => p.status === 'in');
   const out = roster.filter((p) => p.status === 'out').sort((a, b) => b.order - a.order);
   const all = [...wins, ...inGame, ...out];
-  $('rosterCount').textContent = roster.length ? `${inGame.length + wins.length} / ${roster.length}` : '';
+  setText($('rosterCount'), roster.length ? `${inGame.length + wins.length} / ${roster.length}` : '');
 
   const list = $('roster');
   const u = Math.min(innerHeight / 100, innerWidth * 0.005625); // то же, что --u в CSS
   const probe = list.firstElementChild?.getBoundingClientRect().height || u * 3.4;
   const fit = Math.max(1, Math.floor(list.clientHeight / probe));
   const shown = all.length > fit ? all.slice(0, fit - 1) : all;
-  list.innerHTML = shown
-    .map((p) => {
-      const color = MATERIALS[p.mat % MATERIALS.length].color;
-      const place = p.status === 'win' ? `<span class="place">${p.place} место</span>` : '';
-      return `<li class="${p.status}"><span class="chip" style="background:${color}"></span><span class="nm">${escapeHtml(p.name)}</span>${place}</li>`;
-    })
-    .join('');
-  $('rosterMore').textContent = all.length > shown.length ? `и ещё ${all.length - shown.length}` : '';
+  setHtml(
+    list,
+    shown
+      .map((p) => {
+        const color = MATERIALS[p.mat % MATERIALS.length].color;
+        const place = p.status === 'win' ? `<span class="place">${p.place} место</span>` : '';
+        return `<li class="${p.status}"><span class="chip" style="background:${color}"></span><span class="nm">${escapeHtml(p.name)}</span>${place}</li>`;
+      })
+      .join(''),
+  );
+  setText($('rosterMore'), all.length > shown.length ? `и ещё ${all.length - shown.length}` : '');
 }
 
 new ResizeObserver(() => renderRoster()).observe($('roster'));
 
 async function onSpin(msg) {
   setIdle(false);
-  $('header').innerHTML = '';
+  setHtml($('header'), '');
   showResult(null);
   shownEntries = entriesKey(msg.entries);
   wheel.setEntries(msg.entries, { keepBall: true });
@@ -128,9 +133,21 @@ function showResult(r) {
     el.className = 'result';
     return;
   }
-  $('resultMain').textContent = r.kind === 'win' ? `🏆 ${r.prize} — ${r.name}` : `Выбывает: ${r.name}`;
-  $('resultSub').textContent = (r.also || []).map((a) => `${a.prize} — ${a.name}`).join('  ·  ');
+  setText($('resultMain'), r.kind === 'win' ? `🏆 ${r.prize} — ${r.name}` : `Выбывает: ${r.name}`);
+  setText($('resultSub'), (r.also || []).map((a) => `${a.prize} — ${a.name}`).join('  ·  '));
   el.className = `result ${r.kind} show`;
+}
+
+// Состояние от пульта приходит до четырёх раз в секунду, обычно без изменений: трогаем страницу,
+// только когда содержимое правда другое, иначе браузер заново раскладывает и перерисовывает блок.
+function setHtml(el, html) {
+  if (el.__html === html) return;
+  el.__html = html;
+  el.innerHTML = html;
+}
+
+function setText(el, text) {
+  if (el.textContent !== text) el.textContent = text;
 }
 
 function entriesKey(entries) {

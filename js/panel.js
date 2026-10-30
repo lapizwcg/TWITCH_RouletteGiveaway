@@ -1,10 +1,10 @@
-import * as tw from './twitch.js?v=23';
-import { SCOPES } from './config.js?v=23';
-import { Wheel } from './wheel.js?v=23';
-import { createBus } from './bus.js?v=23';
-import * as G from './giveaway.js?v=23';
-import { MATERIALS } from './materials.js?v=23';
-import { mark, DEBUG } from './perfhud.js?v=23';
+import * as tw from './twitch.js?v=24';
+import { SCOPES } from './config.js?v=24';
+import { Wheel } from './wheel.js?v=24';
+import { createBus } from './bus.js?v=24';
+import * as G from './giveaway.js?v=24';
+import { MATERIALS } from './materials.js?v=24';
+import { mark, DEBUG } from './perfhud.js?v=24';
 
 const $ = (id) => document.getElementById(id);
 const SETTINGS_KEY = 'trg.settings';
@@ -574,9 +574,9 @@ function renderStage() {
   const res = $('result');
   // Плашка не исчезает из разметки, а становится невидимой — так кнопка под ней остаётся на месте.
   const showResult = display.result && !spinning;
+  const resText = showResult ? G.resultText(display.result) : '';
   res.className = `result ${showResult ? display.result.kind : 'empty'}`;
-  res.textContent = showResult ? G.resultText(display.result) : '';
-  res.title = res.textContent;
+  if (res.textContent !== resText) res.textContent = res.title = resText;
 
   // Внизу всегда одна главная кнопка по ходу розыгрыша; остальное — в окне настроек.
   const show = (id, cond) => ($(id).hidden = !cond);
@@ -591,9 +591,9 @@ function renderStage() {
 
 function renderWinners() {
   const list = winnersView();
-  $('winners').innerHTML = list.length
+  setHtml($('winners'), list.length
     ? list.map((w) => `<li><span class="prize">${escapeHtml(w.prize)}</span><span class="name">${escapeHtml(w.name)}</span></li>`).join('')
-    : '<li class="empty">Пока никого</li>';
+    : '<li class="empty">Пока никого</li>');
 }
 
 function winnersView() {
@@ -605,9 +605,9 @@ function winnersView() {
 function renderPeople() {
   const counts = { ok: 0, checking: 0, rejected: 0 };
   for (const p of g.participants) counts[p.status]++;
-  $('counts').innerHTML = `<span>допущено <b class="ok">${counts.ok}</b></span>
+  setHtml($('counts'), `<span>допущено <b class="ok">${counts.ok}</b></span>
     ${counts.checking ? `<span>проверка <b class="checking">${counts.checking}</b></span>` : ''}
-    <span>отклонено <b class="rejected">${counts.rejected}</b></span>`;
+    <span>отклонено <b class="rejected">${counts.rejected}</b></span>`);
 
   const q = $('search').value.trim().toLowerCase();
   const filter = $('filter').value;
@@ -619,7 +619,7 @@ function renderPeople() {
     .slice(-500)
     .reverse();
 
-  $('people').innerHTML = shown.length
+  setHtml($('people'), shown.length
     ? shown
         .map((p) => {
           const cls = won.has(p.id) ? 'won' : out.has(p.id) ? 'out' : '';
@@ -637,7 +637,7 @@ function renderPeople() {
           </li>`;
         })
         .join('')
-    : `<li class="empty">${g.participants.length ? 'Никого не найдено' : 'Пока никто не записался'}</li>`;
+    : `<li class="empty">${g.participants.length ? 'Никого не найдено' : 'Пока никто не записался'}</li>`);
 
   const canAdd = g.phase !== 'finished' && !hasResults();
   for (const el of [$('addName'), $('addForm').querySelector('button'), $('addTest')]) el.disabled = !canAdd;
@@ -709,6 +709,13 @@ function copyOverlayUrl() {
 }
 
 // ---------- Мелочи ----------
+
+// render() вызывается на каждое сообщение чата; списки пересобираем, только если они правда изменились.
+function setHtml(el, html) {
+  if (el.__html === html) return;
+  el.__html = html;
+  el.innerHTML = html;
+}
 
 function showNotice(html, error = false) {
   const el = $('notice');

@@ -8,11 +8,11 @@
 // как трибуна, поэтому никто никого не загораживает. Камера ортографическая и почти фронтальная:
 // все ячейки одного размера, ни один ряд не мельче другого.
 
-import * as THREE from './vendor/three.bundle.js?v=23';
-import { RoomEnvironment, GLTFLoader, MeshoptDecoder, cloneSkinned } from './vendor/three.bundle.js?v=23';
-import { MATERIALS } from './materials.js?v=23';
-import { splitName } from './headart.js?v=23';
-import { mark } from './perfhud.js?v=23';
+import * as THREE from './vendor/three.bundle.js?v=24';
+import { RoomEnvironment, GLTFLoader, MeshoptDecoder, cloneSkinned } from './vendor/three.bundle.js?v=24';
+import { MATERIALS } from './materials.js?v=24';
+import { splitName } from './headart.js?v=24';
+import { mark } from './perfhud.js?v=24';
 
 // Текстура каждого персонажа KayKit — сетка 8×4 вертикальных градиентов («ячеек», по 128×256 пикселей):
 // каждая ячейка — отдельный материал модели (кожа, сталь, ткань, ремни), а тени зашиты в градиент.
@@ -214,6 +214,7 @@ export class Crowd {
   placeInCell(c) {
     const i = this.cells.indexOf(c.id);
     if (i >= 0) c.root.position.copy(this.cellPos(i));
+    this.labelsDirty = true;
   }
 
   spawn(p, kind) {
@@ -418,6 +419,7 @@ export class Crowd {
     this.last = now;
     this.spawnQueued();
     for (const c of this.people.values()) {
+      if (!c.root.visible) continue; // растаявшего выбывшего не анимируем
       c.t += dt;
       c.mixer.update(dt);
       if (c.status === 'out') {
@@ -431,10 +433,12 @@ export class Crowd {
       }
     }
     this.renderer.render(this.scene, this.camera);
-    this.placeLabels();
+    if (this.labelsDirty) this.placeLabels();
   }
 
+  /** Подписи стоят на месте, пока не сдвинулась сетка или камера, — не трогаем их стили каждый кадр. */
   placeLabels() {
+    this.labelsDirty = false;
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
     const v = new THREE.Vector3();
@@ -453,7 +457,8 @@ export class Crowd {
       el.className = 'crowd-extra';
       this.labelsEl.append(el);
     }
-    el.textContent = `и ещё ${this.extra}`;
+    const text = `и ещё ${this.extra}`;
+    if (el.textContent !== text) el.textContent = text;
   }
 
   resize() {
@@ -491,6 +496,7 @@ export class Crowd {
     const cy = (y0 + y1) / 2;
     Object.assign(cam, { left: cx - halfW, right: cx + halfW, top: cy + halfH, bottom: cy - halfH });
     cam.updateProjectionMatrix();
+    this.labelsDirty = true;
 
     // Подпись не шире своей ячейки, шрифт — от размера ячейки: при ступени вниз уменьшается вместе с сеткой.
     const cellPx = (CELL_W * this.canvas.clientWidth) / (2 * halfW);
