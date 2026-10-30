@@ -5,10 +5,10 @@
 // Угол a в мире — точка (cos a, ?, sin a). Ячейка i головы занимает углы [rotation + i*step, rotation + (i+1)*step].
 // Угол -π/2 — дальняя от зрителя сторона колеса (верх кадра).
 
-import * as THREE from './vendor/three.bundle.js?v=25';
-import { RoomEnvironment } from './vendor/three.bundle.js?v=25';
-import { drawHead } from './headart.js?v=25';
-import { mark } from './perfhud.js?v=25';
+import * as THREE from './vendor/three.bundle.js?v=26';
+import { RoomEnvironment } from './vendor/three.bundle.js?v=26';
+import { drawHead } from './headart.js?v=26';
+import { mark } from './perfhud.js?v=26';
 
 const TAU = Math.PI * 2;
 const MAX_FRETS = 256;
@@ -197,6 +197,10 @@ export class Wheel {
         this.rotation = mod(this.rotation, TAU);
         this.ball = { mode: 'pocket', rel: relTarget, r: POCKET_R, y: BALL };
         this.anim = null;
+        // Картинка, готовая во время прокрута, заливается сейчас — колесо стоит, рывок не виден.
+        const d = this.deferredFill;
+        this.deferredFill = null;
+        if (d) this.fill(...d);
         resolve();
       };
       // t0 ставит первый кадр: время кадра в requestAnimationFrame — начало кадра, оно бывает раньше клика,
@@ -374,7 +378,7 @@ export class Wheel {
     this.jobs = new Map();
     this.jobId = 0;
     try {
-      this.worker = new Worker(new URL('./headart.worker.js?v=25', import.meta.url), { type: 'module' });
+      this.worker = new Worker(new URL('./headart.worker.js?v=26', import.meta.url), { type: 'module' });
       this.worker.onmessage = (e) => this.onPainted(e.data);
       this.worker.onerror = () => (this.worker = null); // нет OffscreenCanvas — рисуем в основном потоке
     } catch {
@@ -616,6 +620,16 @@ export class Wheel {
   paint(entries, swap) {
     const key = entriesKey(entries);
     if (this.worker) {
+      // Этот список уже рисуется (заготовка) — второй раз не рисуем, только просим переключиться.
+      for (const job of this.jobs.values()) {
+        if (job.key !== key) continue;
+        job.swap ||= swap;
+        return;
+      }
+      if (this.deferredFill?.[0].key === key) {
+        this.deferredFill[0].swap ||= swap;
+        return;
+      }
       const id = ++this.jobId;
       this.jobs.set(id, { key, count: entries.length, swap });
       this.worker.postMessage({ id, entries, R: HEAD_R });
@@ -637,6 +651,16 @@ export class Wheel {
 
   /** Кладёт готовые картинки в запасной комплект и заливает их в видеокарту. */
   fill(job, color, orm, flipY) {
+    // Заливка 2048×2048 в видеокарту на прокруте — заметный рывок (так бывало, если нажать «КРУТИТЬ»
+    // сразу после результата, пока заготовка ещё рисовалась). Откладываем до остановки колеса:
+    // до тех пор хватает старой картинки со сжатым сектором.
+    if (this.anim) {
+      mark('колесо: картинка готова, заливка отложена до остановки');
+      const old = this.deferredFill;
+      if (old) for (const image of [old[1], old[2]]) image.close?.();
+      this.deferredFill = [job, color, orm, flipY];
+      return;
+    }
     mark('колесо: картинка готова, заливка');
     const back = this.buffers[1 - this.front];
     for (const [tex, image] of [
