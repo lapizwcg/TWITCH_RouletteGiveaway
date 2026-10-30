@@ -1,12 +1,18 @@
 // Диагностика рывков: включается параметром ?debug=1 в адресе пульта или оверлея.
 // Табло в углу записывает каждый долгий кадр (дольше ~28 мс) и что в этот момент делало приложение
-// (метки mark() из wheel.js, panel.js, overlay.js, crowd.js). Отчёт копируется кнопкой.
+// (метки mark() из wheel.js, panel.js, overlay.js, crowd.js). Отчёт показывается в поле, откуда его
+// можно скопировать Ctrl+C: в OBS у страниц нет доступа к буферу обмена. Отчёт оверлея (источника в OBS,
+// с которым не поработаешь) пульт забирает кнопкой «Отчёт оверлея» — оба должны быть открыты с ?debug=1.
 // Без ?debug=1 ничего не делает и ничего не рисует.
+
+import { createBus } from './bus.js?v=30';
 
 export const DEBUG = new URLSearchParams(location.search).has('debug');
 
 const events = []; // [время, метка]
 const hitches = []; // { at, dur, around: [метки рядом] }
+
+const IS_OVERLAY = location.pathname.includes('overlay');
 
 export function mark(label) {
   if (!DEBUG) return;
@@ -26,7 +32,11 @@ function start() {
     'background:rgba(0,0,0,.82);color:#e8e8e8;font:12px/1.35 Consolas,monospace;border:1px solid #555;border-radius:6px';
   box.innerHTML =
     '<div><b>Диагностика</b> <span id="__hudInfo"></span></div>' +
-    '<div style="margin:4px 0"><button id="__hudCopy">Копировать отчёт</button> <button id="__hudClear">Очистить</button></div>' +
+    '<div style="margin:4px 0"><button id="__hudCopy">Отчёт</button> ' +
+    (IS_OVERLAY ? '' : '<button id="__hudOverlay">Отчёт оверлея</button> ') +
+    '<button id="__hudClear">Очистить</button></div>' +
+    '<textarea id="__hudText" readonly hidden style="width:100%;height:140px;box-sizing:border-box;font:11px Consolas,monospace;' +
+    'background:#111;color:#e8e8e8;border:1px solid #555"></textarea>' +
     '<div id="__hudList"></div>';
   const attach = () => document.body.append(box);
   document.body ? attach() : addEventListener('DOMContentLoaded', attach);
@@ -85,23 +95,41 @@ function start() {
       .join('');
   }
 
+  // Пульт просит отчёт — оверлей отвечает своим.
+  const bus = createBus((msg) => {
+    if (msg.type === 'hud-request' && IS_OVERLAY) bus.send('hud-report', { text: report() });
+    if (msg.type === 'hud-report' && !IS_OVERLAY) show(msg.text);
+  });
+
+  function report() {
+    return [
+      `Страница: ${location.pathname.split('/').pop() || 'index.html'} ${location.search}`,
+      `Браузер: ${navigator.userAgent}`,
+      `Время работы: ${(performance.now() / 1000).toFixed(0)} с, fps сейчас: ${fps}`,
+      '',
+      ...hitches.map((h) => `${h.dur} мс в ${(h.at / 1000).toFixed(1)} с\n  ${h.around.join('\n  ') || '—'}`),
+    ].join('\n');
+  }
+
+  // Текст — в поле, выделенный целиком: Ctrl+C работает и в док-панели OBS. Буфер обмена — если браузер даст.
+  function show(text) {
+    const area = document.getElementById('__hudText');
+    area.hidden = false;
+    area.value = text;
+    area.focus();
+    area.select();
+    navigator.clipboard?.writeText(text).catch(() => {});
+  }
+
   addEventListener('click', (e) => {
     if (e.target.id === '__hudClear') {
       hitches.length = 0;
       render();
     }
-    if (e.target.id === '__hudCopy') {
-      const text = [
-        `Страница: ${location.pathname.split('/').pop() || 'index.html'} ${location.search}`,
-        `Браузер: ${navigator.userAgent}`,
-        `Время работы: ${(performance.now() / 1000).toFixed(0)} с, fps сейчас: ${fps}`,
-        '',
-        ...hitches.map((h) => `${h.dur} мс в ${(h.at / 1000).toFixed(1)} с\n  ${h.around.join('\n  ') || '—'}`),
-      ].join('\n');
-      navigator.clipboard.writeText(text).then(
-        () => (e.target.textContent = 'Скопировано'),
-        () => prompt('Скопируйте отчёт:', text),
-      );
+    if (e.target.id === '__hudCopy') show(report());
+    if (e.target.id === '__hudOverlay') {
+      show('Жду ответ оверлея… (он должен быть открыт с ?debug=1)');
+      bus.send('hud-request');
     }
   });
 }
