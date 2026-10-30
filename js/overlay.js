@@ -1,8 +1,8 @@
-import { Wheel } from './wheel.js?v=26';
-import { createBus } from './bus.js?v=26';
-import { mark } from './perfhud.js?v=26';
-import { Crowd } from './crowd.js?v=26';
-import { MATERIALS } from './materials.js?v=26';
+import { Wheel } from './wheel.js?v=27';
+import { createBus } from './bus.js?v=27';
+import { mark } from './perfhud.js?v=27';
+import { Crowd } from './crowd.js?v=27';
+import { MATERIALS } from './materials.js?v=27';
 
 const $ = (id) => document.getElementById(id);
 // В OBS у страницы есть window.obsstudio; вне OBS фон тёмный, чтобы было что видно.
@@ -116,7 +116,9 @@ async function onSpin(msg) {
   shownEntries = entriesKey(msg.entries);
   wheel.setEntries(msg.entries, { keepBall: true });
   spinning = true;
-  await wheel.spin(msg.params);
+  const spun = wheel.spin(msg.params);
+  if (msg.next) wheel.prepare(msg.next); // следующий список рисуется в фоне, пока колесо крутится
+  await spun;
   spinning = false;
   wheel.setHighlight({ index: msg.params.index, kind: msg.result.kind });
   showResult(msg.result);

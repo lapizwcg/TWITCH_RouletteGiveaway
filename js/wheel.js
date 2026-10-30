@@ -5,10 +5,10 @@
 // Угол a в мире — точка (cos a, ?, sin a). Ячейка i головы занимает углы [rotation + i*step, rotation + (i+1)*step].
 // Угол -π/2 — дальняя от зрителя сторона колеса (верх кадра).
 
-import * as THREE from './vendor/three.bundle.js?v=26';
-import { RoomEnvironment } from './vendor/three.bundle.js?v=26';
-import { drawHead } from './headart.js?v=26';
-import { mark } from './perfhud.js?v=26';
+import * as THREE from './vendor/three.bundle.js?v=27';
+import { RoomEnvironment } from './vendor/three.bundle.js?v=27';
+import { drawHead } from './headart.js?v=27';
+import { mark } from './perfhud.js?v=27';
 
 const TAU = Math.PI * 2;
 const MAX_FRETS = 256;
@@ -378,7 +378,7 @@ export class Wheel {
     this.jobs = new Map();
     this.jobId = 0;
     try {
-      this.worker = new Worker(new URL('./headart.worker.js?v=26', import.meta.url), { type: 'module' });
+      this.worker = new Worker(new URL('./headart.worker.js?v=27', import.meta.url), { type: 'module' });
       this.worker.onmessage = (e) => this.onPainted(e.data);
       this.worker.onerror = () => (this.worker = null); // нет OffscreenCanvas — рисуем в основном потоке
     } catch {
@@ -656,9 +656,12 @@ export class Wheel {
     // до тех пор хватает старой картинки со сжатым сектором.
     if (this.anim) {
       mark('колесо: картинка готова, заливка отложена до остановки');
+      // Ждать может одна картинка. Нужная колесу сейчас важнее заготовки: заготовку закажут снова.
       const old = this.deferredFill;
-      if (old) for (const image of [old[1], old[2]]) image.close?.();
-      this.deferredFill = [job, color, orm, flipY];
+      const keepOld = old && old[0].key === this.entriesKey && job.key !== this.entriesKey;
+      const drop = keepOld ? [color, orm] : old ? [old[1], old[2]] : [];
+      for (const image of drop) image.close?.();
+      if (!keepOld) this.deferredFill = [job, color, orm, flipY];
       return;
     }
     mark('колесо: картинка готова, заливка');

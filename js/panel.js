@@ -1,10 +1,10 @@
-import * as tw from './twitch.js?v=26';
-import { SCOPES } from './config.js?v=26';
-import { Wheel } from './wheel.js?v=26';
-import { createBus } from './bus.js?v=26';
-import * as G from './giveaway.js?v=26';
-import { MATERIALS } from './materials.js?v=26';
-import { mark, DEBUG } from './perfhud.js?v=26';
+import * as tw from './twitch.js?v=27';
+import { SCOPES } from './config.js?v=27';
+import { Wheel } from './wheel.js?v=27';
+import { createBus } from './bus.js?v=27';
+import * as G from './giveaway.js?v=27';
+import { MATERIALS } from './materials.js?v=27';
+import { mark, DEBUG } from './perfhud.js?v=27';
 
 const $ = (id) => document.getElementById(id);
 const SETTINGS_KEY = 'trg.settings';
@@ -384,12 +384,21 @@ async function spin() {
     duration: seconds * 1000,
   };
 
+  // Кто выпадет, уже известно — список следующего прокрута рисуем в фоне прямо во время этого,
+  // чтобы «КРУТИТЬ» сразу после результата не ждало картинку.
+  const sim = { ...g, eliminated: [...g.eliminated], winners: [...g.winners] };
+  G.applyStep(sim, step, step.pool[index]);
+  const nextStep = G.planNextStep(sim, settings);
+  const next = nextStep && !nextStep.auto ? entriesOf(nextStep.pool) : null;
+
   spinning = true;
   display = { entries, highlight: null, result: null, locked: true };
   wheel.setEntries(entries, { keepBall: true });
-  bus.send('spin', { entries, params, result: resultView(step, step.pool[index]) });
+  bus.send('spin', { entries, params, next, result: resultView(step, step.pool[index]) });
   render();
-  await wheel.spin(params);
+  const spun = wheel.spin(params);
+  if (next) wheel.prepare(next);
+  await spun;
   spinning = false;
 
   const id = step.pool[index];
