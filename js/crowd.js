@@ -8,11 +8,11 @@
 // как трибуна, поэтому никто никого не загораживает. Камера ортографическая и почти фронтальная:
 // все ячейки одного размера, ни один ряд не мельче другого.
 
-import * as THREE from './vendor/three.bundle.js?v=28';
-import { RoomEnvironment, GLTFLoader, MeshoptDecoder, cloneSkinned } from './vendor/three.bundle.js?v=28';
-import { MATERIALS } from './materials.js?v=28';
-import { splitName } from './headart.js?v=28';
-import { mark } from './perfhud.js?v=28';
+import * as THREE from './vendor/three.bundle.js?v=29';
+import { RoomEnvironment, GLTFLoader, MeshoptDecoder, cloneSkinned } from './vendor/three.bundle.js?v=29';
+import { MATERIALS } from './materials.js?v=29';
+import { splitName } from './headart.js?v=29';
+import { mark } from './perfhud.js?v=29';
 
 // Текстура каждого персонажа KayKit — сетка 8×4 вертикальных градиентов («ячеек», по 128×256 пикселей):
 // каждая ячейка — отдельный материал модели (кожа, сталь, ткань, ремни), а тени зашиты в градиент.
@@ -385,6 +385,7 @@ export class Crowd {
 
   setStatus(c, status) {
     if (c.status === status) return;
+    mark(`толпа: ${c.label.dataset.name} → ${status}`);
     c.status = status;
     c.t = 0;
     c.label.classList.toggle('win', status === 'win');

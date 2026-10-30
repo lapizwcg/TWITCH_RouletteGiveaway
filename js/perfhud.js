@@ -14,7 +14,10 @@ export function mark(label) {
   if (events.length > 600) events.shift();
 }
 
-if (DEBUG) start();
+if (DEBUG) {
+  window.__hud = { events, hitches }; // для замеров из консоли
+  start();
+}
 
 function start() {
   const box = document.createElement('div');
