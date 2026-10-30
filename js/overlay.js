@@ -1,8 +1,8 @@
-import { Wheel } from './wheel.js?v=24';
-import { createBus } from './bus.js?v=24';
-import { mark } from './perfhud.js?v=24';
-import { Crowd } from './crowd.js?v=24';
-import { MATERIALS } from './materials.js?v=24';
+import { Wheel } from './wheel.js?v=25';
+import { createBus } from './bus.js?v=25';
+import { mark } from './perfhud.js?v=25';
+import { Crowd } from './crowd.js?v=25';
+import { MATERIALS } from './materials.js?v=25';
 
 const $ = (id) => document.getElementById(id);
 // В OBS у страницы есть window.obsstudio; вне OBS фон тёмный, чтобы было что видно.

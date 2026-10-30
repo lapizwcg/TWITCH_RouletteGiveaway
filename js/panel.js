@@ -1,10 +1,10 @@
-import * as tw from './twitch.js?v=24';
-import { SCOPES } from './config.js?v=24';
-import { Wheel } from './wheel.js?v=24';
-import { createBus } from './bus.js?v=24';
-import * as G from './giveaway.js?v=24';
-import { MATERIALS } from './materials.js?v=24';
-import { mark, DEBUG } from './perfhud.js?v=24';
+import * as tw from './twitch.js?v=25';
+import { SCOPES } from './config.js?v=25';
+import { Wheel } from './wheel.js?v=25';
+import { createBus } from './bus.js?v=25';
+import * as G from './giveaway.js?v=25';
+import { MATERIALS } from './materials.js?v=25';
+import { mark, DEBUG } from './perfhud.js?v=25';
 
 const $ = (id) => document.getElementById(id);
 const SETTINGS_KEY = 'trg.settings';
